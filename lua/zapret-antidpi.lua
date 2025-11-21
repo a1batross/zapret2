@@ -107,7 +107,7 @@ end
 
 -- nfqws1 : "--orig"
 -- apply modification to current packet
--- standard args : direction, fooling, ip_id, rawsend, reconstruct
+-- standard args : direction, fooling, ip_id
 function pktmod(ctx, desync)
 	direction_cutoff_opposite(ctx, desync, "any")
 	if direction_check(desync, "any") then
