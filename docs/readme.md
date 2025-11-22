@@ -278,6 +278,86 @@ nfqws --dpi-desync=ipfrag2 --dpi-desync-ipfrag-pos-udp=8
 nfqws2 --lua-desync=send:ipfrag:ipfrag_pos_udp=8 --lua-desync=drop
 ```
 
+Рассмотрим теперь пример из zapret-win-bundle. Как `preset_example.cmd` был переписан в `preset2_example.cmd`.
+
+Фильтр windivert поменялся только одним - больше нет параметров `--wf-tcp` и `--wf-udp`. Они разделены по направлениям in/out.
+
+Везде расставлены фильтры профиля мультистратегии `--filter-l7`, фильтры по `--out-range` и по `--payload`.
+Зачем ? В основном для сокращения вызовов LUA кода, который заведомо медленнее C кода.
+Если пакет не попадет в профили с LUA - ни о каком вызове кода LUA речи быть не может.
+Если пакет попал в профиль с LUA, то после первых 10 пакетов с данными наступает отсечение по верхней границе range. Все LUA инстансы входят в состояние instance cutoff,
+соединение входит в состояние "lua cutoff" по направлению "out". Значит вызовов LUA не будет вообще. Не просто вызовов, а даже обращения к движку LUA
+с какой-либо целью. Будет только C код, который посмотрит на признак "cutoff" и сразу же отпустит пакет.
+
+Так же везде расставлены фильтры по payload type. Отчасти так же с целью сократить вызовы LUA даже в пределах первых 10 пакетов с данными.
+С другой стороны, даже при совпадении протокола соединения (`--filter-l7`) может пробежать не интересующий нас пейлоад.
+По умолчанию многие функции из `zapret-antidpi.lua` реагируют только на известные типы пейлоада, но не на конкретные, а на любые известные.
+Если допустить малореальный, но гипотетически возможный сценарий, что в рамках протокола http будет отправлен блок данных с tls или фраза, похожая на сообщение из xmpp,
+то тип пейлоада выскочит tls_client_hello или xmpp_stream, например. Лучше от этого сразу уберечься. Тем более что в других видах протоколов - xmpp, например, -
+пейлоады могут проскакивать нескольких типов вполне ожидаемо. Но работать надо не по всем.
+
+В фейке для TLS по умолчанию - fake_default_tls - однократно при старте меняется SNI с "www.microsoft.com" на случайный и рандомизируется поле "random" в TLS handshake.
+Это делается простой строчкой LUA кода. Больше нет никаких специальных параметров *nfqws2* для модификации пейлоадов.
+В профиле для youtube на лету меняется SNI на "www.google.com", копируется поле TLS "session id" с обрабатываемого в данный момент TLS handshake.
+
+```
+start "zapret: http,https,quic" /min "%~dp0winws.exe" ^
+--wf-tcp=80,443 ^
+--wf-raw-part=@"%~dp0windivert.filter\windivert_part.discord_media.txt" ^
+--wf-raw-part=@"%~dp0windivert.filter\windivert_part.stun.txt" ^
+--wf-raw-part=@"%~dp0windivert.filter\windivert_part.wireguard.txt" ^
+--wf-raw-part=@"%~dp0windivert.filter\windivert_part.quic_initial_ietf.txt" ^
+--filter-tcp=80 --dpi-desync=fake,fakedsplit --dpi-desync-autottl=2 --dpi-desync-fooling=md5sig --new ^
+--filter-tcp=443 --hostlist="%~dp0files\list-youtube.txt" --dpi-desync=fake,multidisorder --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig --dpi-desync-fake-tls-mod=rnd,dupsid,sni=www.google.com --new ^
+--filter-tcp=443 --dpi-desync=fake,multidisorder --dpi-desync-split-pos=midsld --dpi-desync-repeats=6 --dpi-desync-fooling=badseq,md5sig --new ^
+--filter-l7=quic --hostlist="%~dp0files\list-youtube.txt" --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-fake-quic="%~dp0files\quic_initial_www_google_com.bin" --new ^
+--filter-l7=quic --dpi-desync=fake --dpi-desync-repeats=11 ^
+--filter-l7=wireguard,stun,discord --dpi-desync=fake --dpi-desync-repeats=2
+
+
+start "zapret: http,https,quic" /min "%~dp0winws2.exe" ^
+--wf-tcp-out=80,443 ^
+--lua-init=@"%~dp0lua\zapret-lib.lua" --lua-init=@"%~dp0lua\zapret-antidpi.lua" ^
+--lua-init="fake_default_tls = tls_mod(fake_default_tls,'rnd,rndsni')" ^
+--blob=quic_google:@"%~dp0files\quic_initial_www_google_com.bin" ^
+--wf-raw-part=@"%~dp0windivert.filter\windivert_part.discord_media.txt" ^
+--wf-raw-part=@"%~dp0windivert.filter\windivert_part.stun.txt" ^
+--wf-raw-part=@"%~dp0windivert.filter\windivert_part.wireguard.txt" ^
+--wf-raw-part=@"%~dp0windivert.filter\windivert_part.quic_initial_ietf.txt" ^
+--filter-tcp=80 --filter-l7=http ^
+  --out-range=-d10 ^
+  --payload=http_req ^
+   --lua-desync=fake:blob=fake_default_http:ip_autottl=-2,3-20:ip6_autottl=-2,3-20:tcp_md5 ^
+   --lua-desync=fakedsplit:ip_autottl=-2,3-20:ip6_autottl=-2,3-20:tcp_md5 ^
+  --new ^
+--filter-tcp=443 --filter-l7=tls --hostlist="%~dp0files\list-youtube.txt" ^
+  --out-range=-d10 ^
+  --payload=tls_client_hello ^
+   --lua-desync=fake:blob=fake_default_tls:tcp_md5:repeats=11:tls_mod=rnd,dupsid,sni=www.google.com ^
+   --lua-desync=multidisorder:pos=1,midsld ^
+  --new ^
+--filter-tcp=443 --filter-l7=tls ^
+  --out-range=-d10 ^
+  --payload=tls_client_hello ^
+   --lua-desync=fake:blob=fake_default_tls:tcp_md5:tcp_seq=-10000:repeats=6 ^
+   --lua-desync=multidisorder:pos=midsld ^
+  --new ^
+--filter-udp=443 --filter-l7=quic --hostlist="%~dp0files\list-youtube.txt" ^
+  --out-range=-d10 ^
+  --payload=quic_initial ^
+   --lua-desync=fake:blob=quic_google:repeats=11 ^
+  --new ^
+--filter-udp=443 --filter-l7=quic ^
+  --out-range=-d10 ^
+  --payload=quic_initial ^
+   --lua-desync=fake:blob=fake_default_quic:repeats=11 ^
+  --new ^
+--filter-l7=wireguard,stun,discord ^
+  --out-range=-d10 ^
+  --payload=wireguard_initiation,wireguard_cookie,stun_binding_req,discord_ip_discovery ^
+   --lua-desync=fake:blob=0x00000000000000000000000000000000:repeats=2
+```
+
 ### Какие есть еще параметры
 
 Как узнать какие есть еще функции и какие у них бывают параметры ? Смотрите `zapret-antidpi.lua`. Перед каждой функцией подробно описано какие параметры она берет.
