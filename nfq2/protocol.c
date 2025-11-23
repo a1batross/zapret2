@@ -29,7 +29,7 @@ static bool FindNLD(const uint8_t *dom, size_t dlen, int level, const uint8_t **
 	return true;
 }
 
-static const char *l7proto_name[] = {"all","unknown","http","tls","quic","wireguard","dht","discord","stun","xmpp","dns","mtproto"};
+static const char *l7proto_name[] = {"all","unknown","known","http","tls","quic","wireguard","dht","discord","stun","xmpp","dns","mtproto"};
 const char *l7proto_str(t_l7proto l7)
 {
 	if (l7>=L7_LAST) return NULL;
@@ -42,11 +42,11 @@ t_l7proto l7proto_from_name(const char *name)
 }
 bool l7_proto_match(t_l7proto l7proto, uint64_t filter_l7)
 {
-	return !filter_l7 || (filter_l7 & (1<<l7proto));
+	return filter_l7==L7_ALL || (filter_l7 & (1<<l7proto)) || (filter_l7 & (1<<L7_KNOWN)) && l7proto>L7_KNOWN && l7proto<L7_LAST;
 }
 
 static const char *l7payload_name[] = {
- "all","unknown","empty","http_req","http_reply","tls_client_hello","tls_server_hello","quic_initial",
+ "all","unknown","empty","known","http_req","http_reply","tls_client_hello","tls_server_hello","quic_initial",
  "wireguard_initiation","wireguard_response","wireguard_cookie","wireguard_keepalive","wireguard_data",
  "dht","discord_ip_discovery","stun_binding_req",
  "xmpp_stream", "xmpp_starttls", "xmpp_proceed", "xmpp_features",
@@ -64,7 +64,7 @@ const char *l7payload_str(t_l7payload l7)
 }
 bool l7_payload_match(t_l7payload l7payload, uint64_t filter_l7p)
 {
-	return !filter_l7p || (filter_l7p & (1<<l7payload));
+	return filter_l7p==L7P_ALL || (filter_l7p & (1<<l7payload)) || (filter_l7p & (1<<L7P_KNOWN)) && l7payload>L7P_KNOWN && l7payload<L7P_LAST;
 }
 
 

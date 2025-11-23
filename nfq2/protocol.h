@@ -8,6 +8,7 @@
 typedef enum {
 	L7_ALL=0,
 	L7_UNKNOWN,
+	L7_KNOWN,
 	L7_HTTP,
 	L7_TLS,
 	L7_QUIC,
@@ -28,6 +29,7 @@ typedef enum {
 	L7P_ALL=0,
 	L7P_UNKNOWN,
 	L7P_EMPTY,
+	L7P_KNOWN,
 	L7P_HTTP_REQ,
 	L7P_HTTP_REPLY,
 	L7P_TLS_CLIENT_HELLO,

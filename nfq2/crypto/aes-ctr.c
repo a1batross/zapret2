@@ -34,5 +34,3 @@ void aes_ctr_xcrypt_buffer(aes_context *ctx, const uint8_t *iv, uint8_t *buf, si
 		buf[i] = (buf[i] ^ buffer[bi]);
 	}
 }
-
-
