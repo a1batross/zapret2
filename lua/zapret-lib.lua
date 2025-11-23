@@ -423,7 +423,7 @@ end
 -- tcp_ts=N - add N to timestamp value
 -- tcp_md5[=hex] - add MD5 header with optional 16-byte data. all zero by default.
 -- tcp_flags_set=<list> - set tcp flags in comma separated list
--- tcp_unflags_set=<list> - unset tcp flags in comma separated list
+-- tcp_flags_unset=<list> - unset tcp flags in comma separated list
 -- tcp_ts_up - move timestamp tcp option to the top if it's present. this allows linux not to accept badack segments without badseq. this is very strange discovery but it works.
 
 -- fool - custom fooling function : fool_func(dis, fooling_options)
