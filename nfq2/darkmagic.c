@@ -89,26 +89,22 @@ uint8_t tcp_find_scale_factor(const struct tcphdr *tcp)
 	if (scale && scale[1]==3) return scale[2];
 	return SCALE_NONE;
 }
-bool tcp_has_fastopen(const struct tcphdr *tcp)
-{
-	uint8_t *opt;
-	// new style RFC7413
-	opt = tcp_find_option((struct tcphdr*)tcp, TCP_KIND_FASTOPEN);
-	if (opt) return true;
-	// old style RFC6994
-	opt = tcp_find_option((struct tcphdr*)tcp, 254);
-	return opt && opt[1]>=4 && opt[2]==0xF9 && opt[3]==0x89;
-}
 uint16_t tcp_find_mss(const struct tcphdr *tcp)
 {
 	uint8_t *t = tcp_find_option((struct tcphdr *)tcp, TCP_KIND_MSS);
 	return (t && t[1]==4) ? *(uint16_t*)(t+2) : 0;
 }
-bool tcp_has_sack(struct tcphdr *tcp)
+bool tcp_synack_segment(const struct tcphdr *tcphdr)
 {
-	uint8_t *t = tcp_find_option(tcp, TCP_KIND_SACK_PERM);
-	return !!t;
+	/* check for set bits in TCP hdr */
+	return ((tcphdr->th_flags & (TH_URG|TH_ACK|TH_PUSH|TH_RST|TH_SYN|TH_FIN)) == (TH_ACK|TH_SYN));
 }
+bool tcp_syn_segment(const struct tcphdr *tcphdr)
+{
+	/* check for set bits in TCP hdr */
+	return ((tcphdr->th_flags & (TH_URG|TH_ACK|TH_PUSH|TH_RST|TH_SYN|TH_FIN)) == TH_SYN);
+}
+
 
 void extract_ports(const struct tcphdr *tcphdr, const struct udphdr *udphdr, uint8_t *proto, uint16_t *sport, uint16_t *dport)
 {
@@ -550,56 +546,6 @@ void proto_dissect_l3l4(const uint8_t *data, size_t len, struct dissect *dis)
 }
 
 
-bool tcp_synack_segment(const struct tcphdr *tcphdr)
-{
-	/* check for set bits in TCP hdr */
-	return ((tcphdr->th_flags & (TH_URG|TH_ACK|TH_PUSH|TH_RST|TH_SYN|TH_FIN)) == (TH_ACK|TH_SYN));
-}
-bool tcp_syn_segment(const struct tcphdr *tcphdr)
-{
-	/* check for set bits in TCP hdr */
-	return ((tcphdr->th_flags & (TH_URG|TH_ACK|TH_PUSH|TH_RST|TH_SYN|TH_FIN)) == TH_SYN);
-}
-bool tcp_ack_segment(const struct tcphdr *tcphdr)
-{
-	/* check for set bits in TCP hdr */
-	return ((tcphdr->th_flags & (TH_URG|TH_ACK|TH_PUSH|TH_RST|TH_SYN|TH_FIN)) == TH_ACK);
-}
-
-void tcp_rewrite_wscale(struct tcphdr *tcp, uint8_t scale_factor)
-{
-	uint8_t *scale,scale_factor_old;
-
-	if (scale_factor!=SCALE_NONE)
-	{
-		scale = tcp_find_option(tcp,3); // tcp option 3 - scale factor
-		if (scale && scale[1]==3) // length should be 3
-		{
-			scale_factor_old=scale[2];
-			// do not allow increasing scale factor
-			if (scale_factor>=scale_factor_old)
-				DLOG("Scale factor %u unchanged\n", scale_factor_old);
-			else
-			{
-				scale[2]=scale_factor;
-				DLOG("Scale factor change %u => %u\n", scale_factor_old, scale_factor);
-			}
-		}
-	}
-}
-// scale_factor=SCALE_NONE - do not change
-void tcp_rewrite_winsize(struct tcphdr *tcp, uint16_t winsize, uint8_t scale_factor)
-{
-	uint16_t winsize_old;
-
-	winsize_old = htons(tcp->th_win); // << scale_factor;
-	tcp->th_win = htons(winsize);
-	DLOG("Window size change %u => %u\n", winsize_old, winsize);
-
-	tcp_rewrite_wscale(tcp, scale_factor);
-}
-
-
 uint8_t ttl46(const struct ip *ip, const struct ip6_hdr *ip6)
 {
 	return ip ? ip->ip_ttl : ip6 ? ip6->ip6_ctlun.ip6_un1.ip6_un1_hlim : 0;
@@ -669,15 +615,6 @@ BOOL LowMandatoryLevel(void)
 	return bRes;
 }
 
-static BOOL WinSandbox(void)
-{
-	// unfortunately there's no way to remove or disable Administrators group in the current process's token
-	// only possible run child process with restricted token
-	// but at least it's possible to permanently remove privileges
-	// this is not much but better than nothing
-	return RemoveTokenPrivs();
-}
-
 BOOL SetMandatoryLabelFile(LPCSTR lpFileName, DWORD dwMandatoryLabelRID)
 {
 	BOOL bRes=FALSE;
@@ -685,24 +622,22 @@ BOOL SetMandatoryLabelFile(LPCSTR lpFileName, DWORD dwMandatoryLabelRID)
 	char buf_label[16], buf_pacl[32];
 	PSID label = (PSID)buf_label;
 	PACL pacl = (PACL)buf_pacl;
-	LPWSTR lpFileNameW;
+	LPWSTR lpFileNameW = NULL;
 	size_t szFileName;
 
 	szFileName = strlen(lpFileName);
 	if (!(lpFileNameW = (LPWSTR)LocalAlloc(LMEM_FIXED,(szFileName+1)*sizeof(WCHAR))))
-		return FALSE;
+		goto err;
 
 	if (!MultiByteToWideChar(CP_UTF8, 0, lpFileName, -1, lpFileNameW, szFileName+1))
-	{
-		LocalFree(lpFileNameW);
-		return FALSE;
-	}
+		goto err;
 
-	dwFileAttributes = GetFileAttributesW(lpFileNameW);
-	if (dwFileAttributes == INVALID_FILE_ATTRIBUTES)
+	if (!strncmp(lpFileName,"\\\\.\\",4))
+		dwFileAttributes = 0;
+	else
 	{
-		LocalFree(lpFileNameW);
-		return FALSE;
+		dwFileAttributes = GetFileAttributesW(lpFileNameW);
+		if (dwFileAttributes == INVALID_FILE_ATTRIBUTES) goto err;
 	}
 
 	InitializeSid(label, &label_authority, 1);
@@ -713,6 +648,7 @@ BOOL SetMandatoryLabelFile(LPCSTR lpFileName, DWORD dwMandatoryLabelRID)
 		SetLastError(dwErr);
 		bRes = dwErr==ERROR_SUCCESS;
 	}
+err:
 	if (!bRes) w_win32_error = GetLastError();
 	LocalFree(lpFileNameW);
 	return bRes;
@@ -723,17 +659,21 @@ bool ensure_file_access(const char *filename)
 	return SetMandatoryLabelFile(filename, SECURITY_MANDATORY_LOW_RID);
 }
 
-bool win_irreversible_sandbox(void)
-{
-	// there's no way to return privs
-	return LowMandatoryLevel();
-}
+#define WINDIVERT_DEVICE_NAME "WinDivert"
+
 static bool b_isandbox_set = false;
-bool win_irreversible_sandbox_if_possible(void)
+bool win_sandbox(void)
 {
+	if (!RemoveTokenPrivs())
+		return FALSE;
+
+	// there's no way to return privs
 	if (!b_isandbox_set)
 	{
-		if (!logical_net_filter_present() && !win_irreversible_sandbox())
+		// set low mandatory label on windivert device to allow administrators with low label access the driver
+		if (logical_net_filter_present() && !SetMandatoryLabelFile("\\\\.\\" WINDIVERT_DEVICE_NAME, SECURITY_MANDATORY_LOW_RID))
+			return FALSE;
+		if (!LowMandatoryLevel())
 			return false;
 		b_isandbox_set = true;
 	}
@@ -833,8 +773,6 @@ bool win_dark_init(const struct str_list_head *ssid_filter, const struct str_lis
 	win_dark_deinit();
 	if (LIST_EMPTY(ssid_filter)) ssid_filter=NULL;
 	if (LIST_EMPTY(nlm_filter)) nlm_filter=NULL;
-
-	if (!WinSandbox()) return false;
 
 	if (nlm_filter)
 	{

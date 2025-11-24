@@ -83,9 +83,8 @@ uint8_t *tcp_find_option(struct tcphdr *tcp, uint8_t kind);
 uint32_t *tcp_find_timestamps(struct tcphdr *tcp);
 uint8_t tcp_find_scale_factor(const struct tcphdr *tcp);
 uint16_t tcp_find_mss(const struct tcphdr *tcp);
-bool tcp_has_sack(struct tcphdr *tcp);
-
-bool tcp_has_fastopen(const struct tcphdr *tcp);
+bool tcp_synack_segment(const struct tcphdr *tcphdr);
+bool tcp_syn_segment(const struct tcphdr *tcphdr);
 
 bool ip_has_df(const struct ip *ip);
 
@@ -95,8 +94,7 @@ bool ensure_file_access(const char *filename);
 #ifdef __CYGWIN__
 extern uint32_t w_win32_error;
 
-bool win_irreversible_sandbox(void);
-bool win_irreversible_sandbox_if_possible(void);
+bool win_sandbox(void);
 bool win_dark_init(const struct str_list_head *ssid_filter, const struct str_list_head *nlm_filter);
 bool win_dark_deinit(void);
 bool logical_net_filter_present(void);
@@ -161,13 +159,6 @@ struct dissect
 	size_t len_payload;
 };
 void proto_dissect_l3l4(const uint8_t *data, size_t len, struct dissect *dis);
-
-bool tcp_synack_segment(const struct tcphdr *tcphdr);
-bool tcp_syn_segment(const struct tcphdr *tcphdr);
-bool tcp_ack_segment(const struct tcphdr *tcphdr);
-// scale_factor=SCALE_NONE - do not change
-void tcp_rewrite_wscale(struct tcphdr *tcp, uint8_t scale_factor);
-void tcp_rewrite_winsize(struct tcphdr *tcp, uint16_t winsize, uint8_t scale_factor);
 
 uint8_t ttl46(const struct ip *ip, const struct ip6_hdr *ip6);
 

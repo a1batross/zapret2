@@ -626,9 +626,15 @@ static int win_main()
 			DLOG_CONDUP("logical network now present\n");
 		}
 
-		if (!windivert_init(params.windivert_filter) || !win_irreversible_sandbox_if_possible())
+		if (!windivert_init(params.windivert_filter))
 		{
 			res=w_win32_error; goto ex;
+		}
+		if (!win_sandbox())
+		{
+			res=w_win32_error;
+			DLOG_ERR("Cannot init Windows sandbox\n");
+			goto ex;
 		}
 
 
