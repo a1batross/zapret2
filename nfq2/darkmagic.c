@@ -20,6 +20,8 @@
 #include "nfqws.h"
 
 #ifdef __CYGWIN__
+#include <sys/cygwin.h>
+
 #include <wlanapi.h>
 #include <netlistmgr.h>
 #include <aclapi.h>
@@ -669,15 +671,11 @@ static bool set_low_appdata_env()
 	HRESULT hr = SHGetKnownFolderPath(&FOLDERID_LocalAppDataLow, 0, NULL, &pszPath);
 	if (SUCCEEDED(hr))
 	{
-		size_t k,l = wcslen(pszPath);
-		// make it cygwin compatible
-		for (k=0 ; k<l ; k++) if (pszPath[k]==L'\\') pszPath[k]=L'/';
-		// max size of utf-8 char is 4 bytes
-		l = l*4 + 1;
+		size_t l = cygwin_conv_path(CCP_WIN_W_TO_POSIX | CCP_ABSOLUTE, pszPath, NULL, 0);
 		char *buf = (char*)malloc(l);
 		if (buf)
 		{
-			if (WideCharToMultiByte(CP_UTF8, 0, pszPath, -1, buf, l, NULL, NULL))
+			if (!cygwin_conv_path(CCP_WIN_W_TO_POSIX | CCP_ABSOLUTE, pszPath, buf, l))
 			{
 				b = true;
 				setenv("APPDATALOW", buf, 1);
