@@ -1408,7 +1408,7 @@ bool IsMTProto(const uint8_t *data, size_t len)
 		ctr_add(iv,3);
 		if (!aes_setkey(&ctx, AES_ENCRYPT, data+8, 32) && !aes_cipher(&ctx, iv, decrypt))
 		{
-			*((uint64_t*)(decrypt+8)) ^= *((uint64_t*)(data+56));
+			*((uint32_t*)(decrypt+8)) ^= *((uint32_t*)(data+56));
 			return !memcmp(decrypt+8,"\xEF\xEF\xEF\xEF",4);
 		}
 	}
