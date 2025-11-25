@@ -70,6 +70,23 @@ standard ipfrag :
 ]]
 
 
+-- execute given lua code. "desync" is temporary set as global var to be accessible to the code
+-- useful for simple fast actions without writing a func
+-- arg: code=<lua_code>
+function luaexec(ctx, desync)
+	if not desync.arg.code then
+		error("luaexec: no 'code' parameter")
+	end
+	local fname = desync.func_instance.."_luaexec_code"
+	if not _G[fname] then
+		_G[fname] = loadstring(desync.arg.code, fname)
+	end
+	-- allow dynamic code to access desync
+	_G.desync = desync
+	_G[fname]()
+	_G.desync = nil
+end
+
 -- dummy test function. does nothing.
 -- no args
 function pass(ctx, desync)
