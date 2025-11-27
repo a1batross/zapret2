@@ -26,8 +26,8 @@ function pcap(ctx, desync)
 	local fn_cache_name = desync.func_instance.."_fn"
 	if not _G[fn_cache_name] then
 		_G[fn_cache_name] = writeable_file_name(desync.arg.file)
-		-- overwrite file
 		if not desync.arg.keep then
+			-- overwrite file
 			os.remove(_G[fn_cache_name])
 		end
 	end
