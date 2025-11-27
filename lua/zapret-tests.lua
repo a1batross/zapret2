@@ -5,20 +5,20 @@ function test_assert(b)
 	assert(b, "test failed")
 end
 
-function test_run(tests)
+function test_run(tests,...)
 	for k,f in pairs(tests) do
-		f()
+		f(...)
 	end
 end
 
 
-function test_all()
-	test_run({test_crypto, test_bin, test_ipstr, test_dissect, test_csum, test_resolve, test_rawsend})
+function test_all(...)
+	test_run({test_crypto, test_bin, test_ipstr, test_dissect, test_csum, test_resolve, test_rawsend},...)
 end
 
 
-function test_crypto()
-	test_run({test_random, test_aes, test_aes_gcm, test_aes_ctr, test_hkdf, test_hash})
+function test_crypto(...)
+	test_run({test_random, test_aes, test_aes_gcm, test_aes_ctr, test_hkdf, test_hash},...)
 end
 
 function test_random()
@@ -299,8 +299,8 @@ function test_bit()
 	test_assert(v2==v3)
 end
 
-function test_bin()
-	test_run({test_ub, test_bit})
+function test_bin(...)
+	test_run({test_ub, test_bit},...)
 end
 
 
@@ -561,9 +561,46 @@ function test_resolve()
 	print("resolve_pos http non-existent : "..tostring(pos))
 end
 
-function test_rawsend()
+function test_rawsend(opts)
+	local ifout = (opts and opts.ifout) and opts.ifout
+	local function rawsend_fail_warning()
+		if not opts or not opts.ifout or #opts.ifout==0 then
+			local un = uname()
+			if string.sub(un.sysname,1,6)=="CYGWIN" then
+				print("windivert requires interface name in the form '<int>.<int>'. take it from winws2 output with '--debug' option and call test_rawsend({ifout=interface_name})")
+			end
+		end
+	end
+	local function rawsend_dissect_print(dis, options)
+		if options then
+			options.ifout = ifout
+		else
+			options = { ifout = ifout }
+		end
+		local b = rawsend_dissect(dis, options)
+		if not b then
+			print("rawsend_dissect failed")
+			rawsend_fail_warning()
+		end
+		return b
+	end
+	local function rawsend_print(raw, options)
+		if options then
+			options.ifout = ifout
+		else
+			options = { ifout = ifout }
+		end
+		print("rawsend: "..string2hex(raw))
+		local b = rawsend(raw, options)
+		if not b then
+			print("rawsend failed")
+			rawsend_fail_warning()
+		end
+		return b
+	end
 	local ip, ip6, udp, dis, ddis, raw_ip, raw_udp, raw
 	local payload = brandom(math.random(100,1200))
+	local b
 
 	ip = {
 		ip_tos = 0,
@@ -580,20 +617,21 @@ function test_rawsend()
 	}
 	dis = {ip = ip, udp = udp, payload = payload}
 	print("send ipv4 udp")
-	test_assert(rawsend_dissect(dis, {repeats=3}))
-
+	test_assert(rawsend_dissect_print(dis, {repeats=3}))
 	ddis = ipfrag2(dis, {ipfrag_pos_udp = 80})
 	for k,d in pairs(ddis) do
 		print("send ipv4 udp frag "..k)
-		test_assert(rawsend_dissect(d))
+		test_assert(rawsend_dissect_print(d))
 	end
 
-	raw_ip = reconstruct_iphdr(ip)
+	local ip2=ip
+	ip2.ip_len = IP_BASE_LEN + UDP_BASE_LEN + #payload
+	raw_ip = reconstruct_iphdr(ip2)
 	raw_udp = reconstruct_udphdr({uh_sport = udp.uh_sport, uh_dport = udp.uh_dport, uh_ulen = UDP_BASE_LEN + #payload})
 	raw_udp = csum_udp_fix(raw_ip,raw_udp,payload)
 	raw = raw_ip .. raw_udp .. payload
 	print("send ipv4 udp using pure rawsend without dissect")
-	test_assert(rawsend(raw, {repeats=5}))
+	test_assert(rawsend_print(raw, {repeats=5}))
 
 	ip6 = {
 		ip6_flow = 0x60000000,
@@ -603,22 +641,22 @@ function test_rawsend()
 	}
 	dis = {ip6 = ip6, udp = udp, payload = payload}
 	print("send ipv6 udp")
-	test_assert(rawsend_dissect(dis, {repeats=3}))
+	test_assert(rawsend_dissect_print(dis, {repeats=3}))
 
 	ddis = ipfrag2(dis, {ipfrag_pos_udp = 80})
 	for k,d in pairs(ddis) do
 		print("send ipv6 udp frag "..k)
-		test_assert(rawsend_dissect(d))
+		test_assert(rawsend_dissect_print(d))
 	end
 
 	ip6.exthdr={{ type = IPPROTO_HOPOPTS, data = "\x00\x00\x00\x00\x00\x00" }}
 	print("send ipv6 udp with hopbyhop ext header")
-	test_assert(rawsend_dissect(dis, {repeats=3}))
+	test_assert(rawsend_dissect_print(dis, {repeats=3}))
 
 	ddis = ipfrag2(dis, {ipfrag_pos_udp = 80})
 	for k,d in pairs(ddis) do
 		print("send ipv6 udp frag "..k.." with hopbyhop ext header")
-		test_assert(rawsend_dissect(d))
+		test_assert(rawsend_dissect_print(d))
 	end
 
 	table.insert(ip6.exthdr, { type = IPPROTO_DSTOPTS, data = "\x00\x00\x00\x00\x00\x00" })
@@ -627,7 +665,7 @@ function test_rawsend()
 	ddis = ipfrag2(dis, {ipfrag_pos_udp = 80})
 	for k,d in pairs(ddis) do
 		print("send ipv6 udp frag "..k.." with hopbyhop, destopt ext headers in unfragmentable part and another destopt ext header in fragmentable part")
-		test_assert(rawsend_dissect(d, {fwmark = 0x50EA}))
+		test_assert(rawsend_dissect_print(d, {fwmark = 0x50EA}))
 	end
 
 	fix_ip6_next(ip6) -- required to forge next proto in the second fragment
@@ -637,6 +675,6 @@ function test_rawsend()
 		print("send ipv6 udp frag "..k.." with hopbyhop, destopt ext headers in unfragmentable part and another destopt ext header in fragmentable part. forge next proto in fragment header of the second fragment to TCP")
 		-- reconstruct dissect using next proto fields in the dissect. do not auto fix next proto chain.
 		-- by default reconstruct fixes next proto chain
-		test_assert(rawsend_dissect(d, {fwmark = 0x409A, repeats=2}, {ip6_preserve_next = true}))
+		test_assert(rawsend_dissect_print(d, {fwmark = 0x409A, repeats=2}, {ip6_preserve_next = true}))
 	end
 end

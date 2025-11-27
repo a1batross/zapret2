@@ -1256,6 +1256,8 @@ bool rawsend(const struct sockaddr* dst,uint32_t fwmark,const char *ifout,const 
 {
 	WINDIVERT_ADDRESS wa;
 
+	if (!ifout) return false;
+
 	memset(&wa,0,sizeof(wa));
 	// pseudo interface id IfIdx.SubIfIdx
 	if (sscanf(ifout,"%u.%u",&wa.Network.IfIdx,&wa.Network.SubIfIdx)!=2)
@@ -1268,12 +1270,12 @@ bool rawsend(const struct sockaddr* dst,uint32_t fwmark,const char *ifout,const 
 	wa.TCPChecksum=1;
 	wa.UDPChecksum=1;
 	wa.IPv6 = (dst->sa_family==AF_INET6);
-
 	if (!windivert_send(data,len,&wa))
 	{
 		DLOG_ERR("windivert send error. win32 code %u\n",w_win32_error);
 		return false;
 	}
+
 	return true;
 }
 

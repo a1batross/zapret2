@@ -2049,6 +2049,7 @@ static int luacall_rawsend(lua_State *L)
 	if (!extract_dst(data, len, (struct sockaddr*)&sa))
 		luaL_error(L, "bad ip4/ip6 header");
 	DLOG("rawsend repeats=%d size=%zu ifout=%s fwmark=%08X\n", repeats,len,ifout ? ifout : "",fwmark);
+
 	b = rawsend_rep(repeats, (struct sockaddr*)&sa, fwmark, ifout, data, len);
 	lua_pushboolean(L, b);
 
@@ -2073,7 +2074,7 @@ static int luacall_rawsend_dissect(lua_State *L)
 	luaL_checktype(L,1,LUA_TTABLE);
 	lua_rawsend_extract_options(L,2, &repeats, &fwmark, &ifout);
 	lua_reconstruct_extract_options(params.L, 3, &badsum, &ip6_preserve_next, NULL);
-	
+
 	if (!lua_reconstruct_dissect(1, buf, &len, badsum, ip6_preserve_next))
 		luaL_error(L, "invalid dissect data");
 
