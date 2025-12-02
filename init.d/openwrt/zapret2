@@ -54,7 +54,7 @@ run_daemon()
 	echo "Starting daemon $1: $2 $3"
 	procd_open_instance
 	procd_set_param command $2 $3
-	procd_set_param pidfile $PIDDIR/$DAEMONBASE$1.pid
+	procd_set_param pidfile $PIDDIR/${DAEMONBASE}_$1.pid
 	procd_close_instance
 }
 
