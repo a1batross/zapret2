@@ -6,7 +6,7 @@
 EXEDIR=$(dirname "$RC_SERVICE")
 EXEDIR="$(cd "$EXEDIR"; pwd)"
 ZAPRET_BASE="$EXEDIR/../.."
-ZAPRET_INIT="$ZAPRET_BASE/init.d/sysv/zapret"
+ZAPRET_INIT="$ZAPRET_BASE/init.d/sysv/zapret2"
 
 extra_commands="start_fw stop_fw restart_fw start_daemons stop_daemons restart_daemons reload_ifsets list_ifsets list_table"
 description="extra commands :"

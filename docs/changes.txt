@@ -38,3 +38,4 @@ v0.2
 v0.3
 * init.d launch scripts
 * init.d: 40-webserver custom script
+* install_easy
