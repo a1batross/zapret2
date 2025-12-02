@@ -17,7 +17,7 @@ zapret_custom_daemons()
 }
 zapret_custom_firewall()
 {
-        # $1 - 1 - run, 0 - stop
+	# $1 - 1 - run, 0 - stop
 
 	local DISABLE_IPV6=1
 	local port_range=$(replace_char - : $DISCORD_MEDIA_PORT_RANGE)
@@ -27,7 +27,7 @@ zapret_custom_firewall()
 }
 zapret_custom_firewall_nft()
 {
-        # stop logic is not required
+	# stop logic is not required
 
 	local DISABLE_IPV6=1
 	local f="udp dport $DISCORD_MEDIA_PORT_RANGE udp length == 82 @ih,0,32 0x00010046 @ih,64,128 0x00000000000000000000000000000000 @ih,192,128 0x00000000000000000000000000000000 @ih,320,128 0x00000000000000000000000000000000 @ih,448,128 0x00000000000000000000000000000000"

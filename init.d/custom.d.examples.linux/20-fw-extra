@@ -42,7 +42,7 @@ zapret_custom_daemons()
 }
 zapret_custom_firewall()
 {
-        # $1 - 1 - run, 0 - stop
+	# $1 - 1 - run, 0 - stop
 
 	check_std_intersect || return
 
@@ -54,7 +54,7 @@ zapret_custom_firewall()
 }
 zapret_custom_firewall_nft()
 {
-        # stop logic is not required
+	# stop logic is not required
 
 	check_std_intersect || return
 

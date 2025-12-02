@@ -16,7 +16,7 @@ zapret_custom_daemons()
 }
 zapret_custom_firewall()
 {
-        # $1 - 1 - run, 0 - stop
+	# $1 - 1 - run, 0 - stop
 
 	local f uf4 uf6
 	local first_packet_only="$ipt_connbytes 1:1"
@@ -28,7 +28,7 @@ zapret_custom_firewall()
 }
 zapret_custom_firewall_nft()
 {
-        # stop logic is not required
+	# stop logic is not required
 
         local f
         local first_packet_only="$nft_connbytes 1"
