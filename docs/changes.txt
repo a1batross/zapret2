@@ -36,6 +36,12 @@ v0.2
 * zapret-pcap
 
 v0.3
+
 * init.d launch scripts
 * init.d: 40-webserver custom script
 * install_easy
+
+v0.4
+
+* nfqws2: profile names
+* blockcheck2: fix broken dns cache
