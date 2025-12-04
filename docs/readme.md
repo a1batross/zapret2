@@ -361,7 +361,7 @@ start "zapret: http,https,quic" /min "%~dp0winws2.exe" ^
   --new ^
 --filter-l7=wireguard,stun,discord ^
   --out-range=-d10 ^
-  --payload=wireguard_initiation,wireguard_cookie,stun_binding_req,discord_ip_discovery ^
+  --payload=wireguard_initiation,wireguard_cookie,stun,discord_ip_discovery ^
    --lua-desync=fake:blob=0x00000000000000000000000000000000:repeats=2
 ```
 

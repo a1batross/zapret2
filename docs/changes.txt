@@ -44,4 +44,6 @@ v0.3
 v0.4
 
 * nfqws2: profile names
+* nfqws2: profile templates
+* nfqws2: remove stun_binding_req, replace to stun. no more message type details
 * blockcheck2: fix broken dns cache
