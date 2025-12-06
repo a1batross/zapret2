@@ -646,6 +646,7 @@ static uint8_t desync(
 	bool bIncoming,
 	t_ctrack *ctrack,
 	const t_ctrack_position *pos,
+	t_l7payload l7proto,
 	t_l7payload l7payload,
 	const struct dissect *dis,
 	const struct in_addr *sdp4, const struct in6_addr *sdp6, uint16_t sdport,
@@ -751,10 +752,11 @@ static uint8_t desync(
 				lua_pushf_bool("replay_piece_last", (replay_piece+1)>=replay_piece_count);
 			}
 			lua_pushf_str("l7payload", l7payload_str(l7payload));
+			lua_pushf_str("l7proto", l7proto_str(l7proto));
 			lua_pushf_int("reasm_offset", reasm_offset);
 			lua_pushf_raw("reasm_data", rdata_payload, rlen_payload);
 			lua_pushf_raw("decrypt_data", data_decrypt, len_decrypt);
-			if (ctrack) lua_pushf_reg("instance_cutoff", ctrack->lua_instance_cutoff);
+			//if (ctrack) lua_pushf_reg("instance_cutoff", ctrack->lua_instance_cutoff);
 			if (dis->tcp)
 			{
 				// recommended mss value for generated packets
@@ -1365,7 +1367,7 @@ static uint8_t dpi_desync_tcp_packet_play(
 		ntop46_port((struct sockaddr *)&dst, s2, sizeof(s2));
 		DLOG("dpi desync src=%s dst=%s track_direction=%s fixed_direction=%s connection_proto=%s payload_type=%s\n", s1, s2, bReverse ? "in" : "out", bReverseFixed ? "in" : "out", l7proto_str(l7proto), l7payload_str(l7payload));
 	}
-	verdict = desync(dp, fwmark, ifin, ifout, bReverseFixed, ctrack_replay, pos, l7payload, dis, sdip4, sdip6, sdport, mod_pkt, len_mod_pkt, replay_piece, replay_piece_count, reasm_offset, rdata_payload, rlen_payload, NULL, 0);
+	verdict = desync(dp, fwmark, ifin, ifout, bReverseFixed, ctrack_replay, pos, l7payload, l7proto, dis, sdip4, sdip6, sdport, mod_pkt, len_mod_pkt, replay_piece, replay_piece_count, reasm_offset, rdata_payload, rlen_payload, NULL, 0);
 
 pass:
 	return (!bReverseFixed && (verdict & VERDICT_MASK) == VERDICT_DROP) ? ct_new_postnat_fix(ctrack, dis, mod_pkt, len_mod_pkt) : verdict;
@@ -1821,7 +1823,7 @@ static uint8_t dpi_desync_udp_packet_play(
 		ntop46_port((struct sockaddr *)&dst, s2, sizeof(s2));
 		DLOG("dpi desync src=%s dst=%s track_direction=%s fixed_direction=%s connection_proto=%s payload_type=%s\n", s1, s2, bReverse ? "in" : "out", bReverseFixed ? "in" : "out", l7proto_str(l7proto), l7payload_str(l7payload));
 	}
-	verdict = desync(dp, fwmark, ifin, ifout, bReverseFixed, ctrack_replay, pos, l7payload, dis, sdip4, sdip6, sdport, mod_pkt, len_mod_pkt, replay_piece, replay_piece_count, reasm_offset, NULL, 0, data_decrypt, len_decrypt);
+	verdict = desync(dp, fwmark, ifin, ifout, bReverseFixed, ctrack_replay, pos, l7payload, l7proto, dis, sdip4, sdip6, sdport, mod_pkt, len_mod_pkt, replay_piece, replay_piece_count, reasm_offset, NULL, 0, data_decrypt, len_decrypt);
 
 pass:
 	return (!bReverse && (verdict & VERDICT_MASK) == VERDICT_DROP) ? ct_new_postnat_fix(ctrack, dis, mod_pkt, len_mod_pkt) : verdict;
