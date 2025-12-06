@@ -647,7 +647,7 @@ static uint8_t desync(
 	t_ctrack *ctrack,
 	const t_ctrack_position *pos,
 	t_l7payload l7payload,
-	t_l7payload l7proto,
+	t_l7proto l7proto,
 	const struct dissect *dis,
 	const struct in_addr *sdp4, const struct in6_addr *sdp6, uint16_t sdport,
 	uint8_t *mod_pkt, size_t *len_mod_pkt,
