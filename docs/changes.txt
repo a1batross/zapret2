@@ -70,3 +70,4 @@ v0.5.1
 v0.6
 
 * zapret-lib,zapret-antidpi: tls_mod_shim supports sni=%var subst
+* blockcheck2: syndata tests
