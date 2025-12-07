@@ -1,8 +1,8 @@
 HEXDUMP_DLOG_MAX = HEXDUMP_DLOG_MAX or 32
 NOT3=bitnot(3)
 NOT7=bitnot(7)
-math.randomseed(os.time())
-
+-- xor pid,tid,sec,nsec
+math.randomseed(bitxor(getpid(),gettid(),clock_gettime()))
 
 -- basic desync function
 -- execute given lua code. "desync" is temporary set as global var to be accessible to the code
