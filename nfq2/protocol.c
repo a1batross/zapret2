@@ -848,7 +848,7 @@ bool TLSMod(const struct fake_tls_mod *tls_mod, const uint8_t *payload, size_t p
 	{
 		if (tls_mod->mod & FAKE_TLS_MOD_DUP_SID)
 		{
-			if (IsTLSClientHello(payload, payload_len, false))
+			if (IsTLSClientHelloPartial(payload, payload_len))
 			{
 				if (payload_len < 44)
 				{
