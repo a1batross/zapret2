@@ -185,7 +185,7 @@ static void ConntrackFeedPacket(t_ctrack *t, bool bReverse, const struct tcphdr 
 			t->pos.pos_reply = t->pos.ack_last + len_payload;
 			if (t->pos.state == SYN)
 				t->pos.uppos_reply_prev = t->pos.uppos_reply = t->pos.pos_reply;
-			else
+			else if (len_payload)
 			{
 				t->pos.uppos_reply_prev = t->pos.uppos_reply;
 				if (!((t->pos.pos_reply - t->pos.uppos_reply) & 0x80000000))
@@ -204,7 +204,7 @@ static void ConntrackFeedPacket(t_ctrack *t, bool bReverse, const struct tcphdr 
 			t->pos.pos_reply = t->pos.ack_last = ntohl(tcphdr->th_ack);
 			if (t->pos.state == SYN)
 				t->pos.uppos_orig_prev = t->pos.uppos_orig = t->pos.pos_orig;
-			else
+			else if (len_payload)
 			{
 				t->pos.uppos_orig_prev = t->pos.uppos_orig;
 				if (!((t->pos.pos_orig - t->pos.uppos_orig) & 0x80000000))
