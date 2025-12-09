@@ -267,6 +267,16 @@ end
 function cond_random(desync)
 	return math.random(0,99)<(tonumber(desync.arg.percent) or 50)
 end
+-- this iif function detects packets having 'arg.pattern' string in their payload
+-- test case : nfqws2 --qnum 200 --debug --lua-init=@zapret-lib.lua --lua-init=@zapret-auto.lua --lua-desync=condition:iff=cond_payload_str:pattern=1234 --lua-desync=argdebug:testarg=1 --lua-desync=argdebug:testarg=2:morearg=xyz
+-- test case (true)  : echo aaz1234zzz | ncat -4u 1.1.1.1 443
+-- test case (false) : echo aaze124zzz | ncat -4u 1.1.1.1 443
+function cond_payload_str(desync)
+	if not desync.arg.pattern then
+		error("cond_payload_str: missing 'pattern'")
+	end
+	return string.find(desync.dis.payload,desync.arg.pattern,1,true)
+end
 -- check iff function available. error if not
 function require_iff(desync, name)
 	if not desync.arg.iff then
