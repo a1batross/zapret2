@@ -248,12 +248,10 @@ static bool is_retransmission(const t_ctrack_position *pos)
 // return true if retrans trigger fires
 static bool auto_hostlist_retrans(t_ctrack *ctrack, uint8_t l4proto, int threshold, const char *client_ip_port, t_l7proto l7proto)
 {
-	if (ctrack && ctrack->dp && ctrack->hostname_ah_check && ctrack->req_retrans_counter != RETRANS_COUNTER_STOP)
+	if (ctrack && ctrack->dp && ctrack->hostname_ah_check && !ctrack->failure_detect_finalized && ctrack->req_retrans_counter != RETRANS_COUNTER_STOP)
 	{
-		if (l4proto == IPPROTO_TCP)
+		if (l4proto == IPPROTO_TCP && ctrack->pos.state!=SYN)
 		{
-			if (ctrack->failure_detect_finalized)
-				return false;
 			if (!seq_within(ctrack->pos.client.seq_last, ctrack->pos.client.seq0, ctrack->pos.client.seq0 + ctrack->dp->hostlist_auto_retrans_maxseq))
 			{
 				ctrack->failure_detect_finalized = true;
@@ -1097,17 +1095,17 @@ static uint8_t dpi_desync_tcp_packet_play(
 		// process reply packets for auto hostlist mode
 		// by looking at RSTs or HTTP replies we decide whether original request looks like DPI blocked
 		// we only process first-sequence replies. do not react to subsequent redirects or RSTs
-		if (!params.server && ctrack && ctrack->hostname_ah_check && !ctrack->failure_detect_finalized)
+		uint32_t rseq = ctrack->pos.server.seq_last - ctrack->pos.server.seq0;
+		if (!params.server && ctrack && ctrack->hostname_ah_check && !ctrack->failure_detect_finalized && rseq && dp->hostlist_auto_incoming_maxseq)
 		{
 			char client_ip_port[48];
 			if (*params.hostlist_auto_debuglog)
 				ntop46_port((struct sockaddr*)&dst, client_ip_port, sizeof(client_ip_port));
 			else
 				*client_ip_port = 0;
-			if (seq_within(ctrack->pos.server.seq_last, ctrack->pos.server.seq0, ctrack->pos.server.seq0 + dp->hostlist_auto_incoming_maxseq))
+			if (seq_within(ctrack->pos.server.seq_last, ctrack->pos.server.seq0 + 1, ctrack->pos.server.seq0 + dp->hostlist_auto_incoming_maxseq))
 			{
 				bool bFail = false;
-				uint32_t rseq = ctrack->pos.server.seq_last - ctrack->pos.server.seq0;
 
 				if (dis->tcp->th_flags & TH_RST)
 				{
@@ -1117,7 +1115,7 @@ static uint8_t dpi_desync_tcp_packet_play(
 				}
 				else if (dis->len_payload && l7payload == L7P_HTTP_REPLY)
 				{
-					DLOG("incoming HTTP reply detected for hostname %s rseq\n", ctrack->hostname, rseq);
+					DLOG("incoming HTTP reply detected for hostname %s rseq %u\n", ctrack->hostname, rseq);
 					bFail = HttpReplyLooksLikeDPIRedirect(dis->data_payload, dis->len_payload, ctrack->hostname);
 					if (bFail)
 					{

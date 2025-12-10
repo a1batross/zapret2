@@ -323,7 +323,7 @@ void ConntrackPoolPurge(t_conntrack *p)
 	struct timespec tnow;
 	t_conntrack_pool *t, *tmp;
 
-	if (!clock_gettime(CLOCK_REALTIME, &tnow)) return;
+	if (clock_gettime(CLOCK_REALTIME, &tnow)) return;
 	if ((tnow.tv_sec - p->t_last_purge) >= p->t_purge_interval)
 	{
 		HASH_ITER(hh, p->pool, t, tmp) {

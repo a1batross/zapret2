@@ -368,8 +368,10 @@ bool HttpReplyLooksLikeDPIRedirect(const uint8_t *data, size_t len, const char *
 	
 	// extract 2nd level domains
 	const char *dhost, *drhost;
-	if (!FindNLD((uint8_t*)host,strlen(host),2,(const uint8_t**)&dhost,NULL) || !FindNLD((uint8_t*)redirect_host,strlen(redirect_host),2,(const uint8_t**)&drhost,NULL))
+	if (!FindNLD((uint8_t*)redirect_host,strlen(redirect_host),2,(const uint8_t**)&drhost,NULL))
 		return false;
+	if (!FindNLD((uint8_t*)host,strlen(host),2,(const uint8_t**)&dhost,NULL))
+		return true; // no SLD redirects to SLD
 
 	// compare 2nd level domains		
 	return strcasecmp(dhost, drhost)!=0;
