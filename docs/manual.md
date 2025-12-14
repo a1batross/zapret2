@@ -1125,7 +1125,7 @@ ipv6 extension headers и tcp options представляются в форме
 | ip_id | идентификация пакета для сборки из фрагментов |
 | ip_off | offset фрагмента, флаги MF (more fragments) и DF (dont fragment) |
 | ip_ttl | time to live - максимальное количество хопов |
-| ip_p | номер ip протокола. как правило IPPROTO_TCP или IPPROTO_UDP |
+| ip_p | [номер ip протокола](https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml). как правило IPPROTO_TCP или IPPROTO_UDP |
 | ip_sum | чексумма ip хедера |
 | ip_src | ip источника |
 | ip_src | ip назначения |
@@ -1136,7 +1136,7 @@ ipv6 extension headers и tcp options представляются в форме
 |:------|:-----|
 | ip6_flow | первые 4 байта ipv6 header : version (6), traffic class, flow label |
 | ip6_plen | длина пакета за вычетом базового хедера ipv6 - IP6_BASE_LEN (40) байт |
-| ip6_nxt | следующий протокол. если нет exthdr - IPPROTO_TCP (6) или IPPROTO_UDP (17) |
+| ip6_nxt | [следующий протокол](https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml). если нет exthdr - IPPROTO_TCP (6) или IPPROTO_UDP (17) |
 | ip6_hlim | hop limit. имеет тот же смысл, что и TTL в ipv4 |
 | ip6_src | ipv6 адрес источника |
 | ip6_dst | ipv6 адрес приемника |
@@ -1145,7 +1145,7 @@ ipv6 extension headers и tcp options представляются в форме
 **ip6 exthdr**
 | Поле  | Описание |
 |:------|:-----|
-| type | тип хедера : IPPROTO_HOPOPTS, IPPROTO_ROUTING, IPPROTO_DSTOPTS, IPPROTO_MH, IPPROTO_HIP, IPPROTO_SHIM6, IPPROTO_FRAGMENT, IPPROTO_AH |
+| type | [тип хедера](https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml) : IPPROTO_HOPOPTS, IPPROTO_ROUTING, IPPROTO_DSTOPTS, IPPROTO_MH, IPPROTO_HIP, IPPROTO_SHIM6, IPPROTO_FRAGMENT, IPPROTO_AH |
 | next | тип следующего хедера. аналогично type. для последнего хедера может быть IPPROTO_TCP или IPPROTO_UDP |
 | data | данные без первых двух байтов - типа и длины |
 
@@ -1186,12 +1186,12 @@ ipv6 extension headers и tcp options представляются в форме
 | th_win | размер tcp окна |
 | th_sum | чексумма tcp |
 | th_urp | urgent pointer |
-| options | массив таблиц tcp опций (индекс от 1) |
+| options | массив таблиц [tcp опций](https://www.iana.org/assignments/tcp-parameters/tcp-parameters.xhtml) (индекс от 1) |
 
 **tcp options**
 | Поле  | Описание |
 |:------|:-----|
-| kind | тип опции : TCP_KIND_END, TCP_KIND_NOOP, TCP_KIND_MSS, TCP_KIND_SCALE, TCP_KIND_SACK_PERM, TCP_KIND_SACK, TCP_KIND_TS, TCP_KIND_MD5, TCP_KIND_AO, TCP_KIND_FASTOPEN |
+| kind | [тип опции](https://www.iana.org/assignments/tcp-parameters/tcp-parameters.xhtml) : TCP_KIND_END, TCP_KIND_NOOP, TCP_KIND_MSS, TCP_KIND_SCALE, TCP_KIND_SACK_PERM, TCP_KIND_SACK, TCP_KIND_TS, TCP_KIND_MD5, TCP_KIND_AO, TCP_KIND_FASTOPEN |
 | data | блок данных опции без kind и length. отсутствует для TCP_KIND_END и TCP_KIND_NOOP |
 
 
