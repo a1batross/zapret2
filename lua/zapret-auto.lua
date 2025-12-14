@@ -283,11 +283,12 @@ end
 -- if 'final' arg is present in an orchestrated instance it stops rotation
 -- arg: fails=N - failture count threshold. default is 3
 -- arg: time=<sec> - if last failure happened earlier than `maxtime` seconds ago - reset failure counter. default is 60.
--- arg: reqhost - pass with no tampering if hostname is unavailable
 -- arg: success_detector - success detector function name
 -- arg: failure_detector - failure detector function name
+-- arg: hostkey - hostkey generator function name
 -- args for failure detector - see standard_failure_detector or your own detector
 -- args for success detector - see standard_success_detector or your own detector
+-- args for hostkey generator - see standard_hostkey or your own generator
 -- test case: nfqws2 --qnum 200 --debug --lua-init=@zapret-lib.lua --lua-init=@zapret-auto.lua --in-range=-s34228 --lua-desync=circular --lua-desync=argdebug:strategy=1 --lua-desync=argdebug:strategy=2
 function circular(ctx, desync)
 	local function count_strategies(hrec)
