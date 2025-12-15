@@ -1472,7 +1472,7 @@ function parse_hex(hex_string)
 function bcryptorandom(size)
 ```
 
-Генерирует криптографически стойкий блок случайных данных указанного размера. Источник - `/dev/random`
+Генерирует raw строку - криптографически стойкий блок случайных данных указанного размера. Источник - `/dev/random`
 
 ```
 function hash(hash_type, data)
