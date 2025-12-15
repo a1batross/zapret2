@@ -1520,6 +1520,7 @@ function hkdf(hash_type, salt, ikm, info, okm_len)
 ```
 
 HKDF - HMAC-based Key Derivation Function. Генератор ключей на базе произвольных входных данных - input keying material (ikm).
+Функция включает extraction и expansion.
 
 * hash_type может быть "sha256" или "sha224"
 * salt - raw строка произвольного размера, может быть nil. "соль". несекретная информация. позволяет сделать результат разным на тех же ikm для разных значений salt. если nil, используется блок нулевых байт размером, равным размеру результата hash функции.
