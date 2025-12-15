@@ -1251,13 +1251,15 @@ void lua_push_dissect(const struct dissect *dis)
 
 	if (dis)
 	{
-		lua_createtable(params.L, 0, 7);
+		lua_createtable(params.L, 0, 9);
 		lua_pushf_iphdr(dis->ip, dis->len_l3);
 		lua_pushf_ip6hdr(dis->ip6, dis->len_l3);
 		lua_pushf_tcphdr(dis->tcp, dis->len_l4);
 		lua_pushf_udphdr(dis->udp, dis->len_l4);
 		lua_pushf_int("l4proto",dis->proto);
 		lua_pushf_int("transport_len",dis->transport_len);
+		lua_pushf_int("l3_len",dis->len_l3);
+		lua_pushf_int("l4_len",dis->len_l4);
 		lua_pushf_raw("payload",dis->data_payload,dis->len_payload);
 	}
 	else
