@@ -1321,7 +1321,7 @@ static uint8_t dpi_desync_tcp_packet_play(
 		bool bDiscoveredL7;
 		if (ctrack_replay)
 		{
-			if (bDiscoveredL7 = !ctrack_replay->l7proto_discovered && ctrack_replay->l7proto != L7_UNKNOWN)
+			if ((bDiscoveredL7 = !ctrack_replay->l7proto_discovered && ctrack_replay->l7proto != L7_UNKNOWN))
 				ctrack_replay->l7proto_discovered = true;
 		}
 		else
