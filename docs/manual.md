@@ -2353,11 +2353,11 @@ nfqws2 ничего не знает о том, что нужно `--lua-desync` 
 
 Применяются так же наборы опций 
 
-* [**standard ipfrag**](#операции-с-диссектами)
-* [**standard ipid**](#операции-с-диссектами)
-* [**standard fooling**](#операции-с-диссектами)
-* [**standard reconstruct**](#опции-по-работе-с-пакетами)
-* [**standard rawsend**](#опции-по-работе-с-пакетами)
+* [standard ipfrag](#операции-с-диссектами)
+* [standard ipid](#операции-с-диссектами)
+* [standard fooling](#операции-с-диссектами)
+* [standard reconstruct](#опции-по-работе-с-пакетами)
+* [standard rawsend](#опции-по-работе-с-пакетами)
 
 
 ## Базовые функции
@@ -2367,8 +2367,8 @@ function drop(ctx, desync)
 ```
 
 Выносит VERDICT_DROP при выполнении условий фильтра.
-* [**standard direction**](#стандартные-наборы-параметров)
-* [**standard payload**](#стандартные-наборы-параметров)
+* [standard direction](#стандартные-наборы-параметров)
+* [standard payload](#стандартные-наборы-параметров)
 * По умолчанию payload=all, direction=any, то есть drop всего.
 
 ```
@@ -2377,12 +2377,12 @@ function send(ctx, desync)
 
 Отсылает текущий диссект c опциональным применением модификаций.
 
-* [**standard direction**](#стандартные-наборы-параметров)
-* [**standard fooling**](#операции-с-диссектами)
-* [**standard ipid**](#операции-с-диссектами)
-* [**standard ipfrag**](#операции-с-диссектами)
-* [**standard reconstruct**](#опции-по-работе-с-пакетами)
-* [**standard rawsend**](#опции-по-работе-с-пакетами)
+* [standard direction](#стандартные-наборы-параметров)
+* [standard fooling](#операции-с-диссектами)
+* [standard ipid](#операции-с-диссектами)
+* [standard ipfrag](#операции-с-диссектами)
+* [standard reconstruct](#опции-по-работе-с-пакетами)
+* [standard rawsend](#опции-по-работе-с-пакетами)
 
 ```
 function send(ctx, desync)
@@ -2396,8 +2396,8 @@ function pktmod(ctx, desync)
 
 Отсылает текущий диссект c опциональным применением модификаций.
 
-* [**standard direction**](#стандартные-наборы-параметров)
-* [**standard fooling**](#операции-с-диссектами)
-* [**standard ipid**](#операции-с-диссектами)
+* [standard direction](#стандартные-наборы-параметров)
+* [standard fooling](#операции-с-диссектами)
+* [standard ipid](#операции-с-диссектами)
 
 
