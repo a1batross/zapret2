@@ -2496,6 +2496,7 @@ function send(ctx, desync)
 * arg: [standard ipfrag](#операции-с-диссектами)
 * arg: [standard reconstruct](#опции-по-работе-с-пакетами)
 * arg: [standard rawsend](#опции-по-работе-с-пакетами)
+* режим ip_id по умолчанию - none
 
 Отсылает текущий диссект c опциональным применением модификаций.
 
