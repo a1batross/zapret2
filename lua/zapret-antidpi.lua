@@ -616,7 +616,7 @@ function fakedsplit(ctx, desync)
 			local pos = resolve_pos(data, desync.l7payload, spos)
 			if pos then
 				if pos == 1 then
-					DLOG("multidisorder: split pos resolved to 0. cannot split.")
+					DLOG("fakedsplit: split pos resolved to 0. cannot split.")
 				else
 					if b_debug then DLOG("fakedsplit: resolved split pos: "..tostring(pos-1)) end
 
@@ -709,7 +709,7 @@ function fakeddisorder(ctx, desync)
 			local pos = resolve_pos(data, desync.l7payload, spos)
 			if pos then
 				if pos == 1 then
-					DLOG("multidisorder: split pos resolved to 0. cannot split.")
+					DLOG("fakeddisorder: split pos resolved to 0. cannot split.")
 				else
 					if b_debug then DLOG("fakeddisorder: resolved split pos: "..tostring(pos-1)) end
 
