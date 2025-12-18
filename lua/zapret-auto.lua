@@ -461,7 +461,7 @@ function repeater(ctx, desync)
 		-- rollback desync plan
 		desync.plan = deepcopy(plancopy)
 	end
-	-- remove repeated instances desync plan
+	-- remove repeated instances from desync plan
 	for i=1,instances do
 		table.remove(desync.plan,1)
 	end
