@@ -3249,8 +3249,8 @@ function circular(ctx, desync)
 
 * arg: [standard host storage](#automate_host_record)
 * arg: [standard checker](#automate_failure_check)
-* arg: (только для стандартного детектора) (standard success detector)(#standard_success_detector)
-* arg: (только для стандартного детектора) (standard failure detector)(#standard_failure_detector)
+* arg: (только для стандартного детектора) [standard success detector](#standard_success_detector)
+* arg: (только для стандартного детектора) [standard failure detector](#standard_failure_detector)
 
 Оркестратор позволяет считать неудачи и менять стратегии по кругу по достижению счетчиком неудач целевого значения fails. Все последующие инстансы маркируются аргументом "strategy", который содержит номер стратегии, начиная от 1. Инстансы, не имеющие аргумента "strategy", circular не вызывает. Номера стратегии должны идти непрерывно от 1 до последней, промежутки не допускаются, иначе вызывается error. Если в любом инстансе стратегии N имеется аргумент "final", эта стратегия является последней - дальнейшее хождение по кругу блокируется.
 
