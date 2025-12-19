@@ -529,6 +529,7 @@ jobs:
                 *-android-x86_64 )      run_dir android-x86_64 ;;
                 *-freebsd-x86_64 )      run_dir freebsd-x86_64 ;;
                 *-linux-arm )           run_dir linux-arm ;;
+                *-linux-arm-old )       run_dir linux-arm-old ;;
                 *-linux-arm64 )         run_dir linux-arm64 ;;
                 *-linux-mips64 )        run_dir linux-mips64 ;;
                 *-linux-mipselsf )      run_dir linux-mipsel ;;
