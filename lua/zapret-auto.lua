@@ -431,6 +431,8 @@ end
 -- repeat following 'instances' 'repeats' times, execute others with no tampering
 -- arg: instances - number of following instances to be repeated. 1 by default
 -- arg: repeats - number of repeats
+-- arg: iff - condition function to continue execution. takes desync as arg and returns bool. (cant use 'if' because of reserved word)
+-- arg: neg - invert condition function result
 -- arg: stop - do not replay remaining execution plan after 'instances'
 -- arg: clear - clear execution plan after 'instances'
 -- test case : --lua-desync=repeater:repeats=2:instances=2 --lua-desync=argdebug:v=1 --lua-desync=argdebug:v=2 --lua-desync=argdebug:v=3
@@ -439,7 +441,12 @@ function repeater(ctx, desync)
 	if not repeats then
 		error("repeat: missing 'repeats'")
 	end
+	local iff = desync.arg.iff or "cond_true"
+	if type(_G[iff])~="function" then
+		error(name..": invalid 'iff' function '"..iff.."'")
+	end
 	orchestrate(ctx, desync)
+	local neg = desync.arg.neg
 	local stop = desync.arg.stop
 	local clear = desync.arg.clear
 	local verdict = VERDICT_PASS
@@ -451,6 +458,10 @@ function repeater(ctx, desync)
 	-- save plan copy
 	local plancopy = deepcopy(desync.plan)
 	for r=1,repeats do
+		if not logical_xor(_G[iff](desync), neg) then
+			DLOG("repeater: break by iff")
+			break
+		end
 		DLOG("repeater: "..repinst.." "..r.."/"..repeats)
 		-- nested orchestrators can also pop
 		local ct_end = #desync.plan - instances

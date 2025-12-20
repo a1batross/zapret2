@@ -117,6 +117,7 @@ v0.7.4
 
 v0.7.5
 
-* zapret-auto : orchestrator "repeater"
+* zapret-auto: orchestrator "repeater"
 * blockcheck2: check http3 with ipv6 exthdr
 * github actions: separate target arm-old with LUA classic, not JIT
+* zapret-auto: iff/neg in repeater
