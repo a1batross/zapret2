@@ -159,7 +159,7 @@ function standard_failure_detector(desync, crec)
 						dis_reverse(dis)
 						dis.tcp.th_flags = TH_RST
 						dis.tcp.th_win = desync.track and desync.track.pos.reverse.tcp.winsize or 64
-						dis.tcp.options = {}
+						dis.tcp.options = nil
 						if dis.ip6 then
 							dis.ip6.ip6_flow = (desync.track and desync.track.pos.reverse.ip6_flow) and desync.track.pos.reverse.ip6_flow or 0x60000000;
 						end
