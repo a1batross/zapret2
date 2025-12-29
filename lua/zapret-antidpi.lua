@@ -290,7 +290,11 @@ end
 -- nfqws1 : not available
 -- standard args : direction
 -- arg: blob = blob name to store cloned tls client hello (stored in desync, not global)
--- arg: snt - server name type value in SNI
+-- arg: sni_snt - server name type value in SNI
+-- arg: sni_del_ext - delete sni extension
+-- arg: sni_del - delete all names
+-- arg: sni_first - add name to the beginning
+-- arg: sni_last - add name to the end
 function tls_client_hello_clone(ctx, desync)
 	if not desync.dis.tcp then
 		instance_cutoff_shim(ctx, desync)
@@ -310,18 +314,37 @@ function tls_client_hello_clone(ctx, desync)
 			DLOG("tls_client_hello_clone: handshake not dissected")
 			return
 		end
-		if desync.arg.snt then
-			local k = array_field_search(tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext, "type", 0)
-			if not k then
-				DLOG("tls_client_hello_clone: no SNI extension")
-				return
+		local idx_sni
+		if desync.arg.sni_snt or desync.arg.sni_del_ext or desync.arg.sni_del or desync.arg.sni_first or desync.arg.sni_last then
+			idx_sni = array_field_search(tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext, "type", 0)
+			if not idx_sni then
+				DLOG("tls_client_hello_clone: no SNI extension. adding")
+				table.insert(tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext, 1, { type = TLS_EXT_SERVER_NAME, dis = { list = {} } } )
 			end
-			for i,v in pairs(tdis.handshake[1].dis.ext[k].dis.list) do
-				v.type=desync.arg.snt
+		end
+		if desync.arg.sni_del_ext then
+			table.remove(tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext, idx_sni)
+		else
+			if desync.arg.sni_del then
+				tdis.handshake[1].dis.ext[idx_sni].dis.list = {}
+			elseif desync.arg.sni_snt then
+				for i,v in pairs(tdis.handshake[1].dis.ext[idx_sni].dis.list) do
+					v.type = desync.arg.sni_snt
+				end
+			end
+			if desync.arg.sni_first then
+				table.insert(tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext[idx_sni].dis.list, 1, { name = desync.arg.sni_first } )
+			end
+			if desync.arg.sni_last then
+				table.insert(tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext[idx_sni].dis.list, { name = desync.arg.sni_last } )
 			end
 		end
 		desync[desync.arg.blob] = tls_reconstruct(tdis)
-		DLOG("tls_client_hello_clone: cloned to desync."..desync.arg.blob)
+		if desync[desync.arg.blob] then
+			DLOG("tls_client_hello_clone: cloned to desync."..desync.arg.blob)
+		else
+			DLOG_ERR("tls_client_hello_clone: reconstruct error")
+		end
 	end
 end
 

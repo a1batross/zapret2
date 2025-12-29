@@ -2227,7 +2227,6 @@ function tls_reconstruct(tdis)
 	end
 
 	local tls
-
 	if tdis.rec then
 		-- need to follow in order
 		local i=1
