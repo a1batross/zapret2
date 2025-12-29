@@ -290,7 +290,8 @@ end
 -- nfqws1 : not available
 -- standard args : direction
 -- arg: blob = blob name to store cloned tls client hello (stored in desync, not global)
--- arg: sni_snt - server name type value in SNI
+-- arg: sni_snt - server name type value in existing names
+-- arg: sni_snt_new - server name type value for new names
 -- arg: sni_del_ext - delete sni extension
 -- arg: sni_del - delete all names
 -- arg: sni_first - add name to the beginning
@@ -327,17 +328,17 @@ function tls_client_hello_clone(ctx, desync)
 			table.remove(tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext, idx_sni)
 		else
 			if desync.arg.sni_del then
-				tdis.handshake[1].dis.ext[idx_sni].dis.list = {}
+				tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext[idx_sni].dis.list = {}
 			elseif desync.arg.sni_snt then
-				for i,v in pairs(tdis.handshake[1].dis.ext[idx_sni].dis.list) do
+				for i,v in pairs(tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext[idx_sni].dis.list) do
 					v.type = desync.arg.sni_snt
 				end
 			end
 			if desync.arg.sni_first then
-				table.insert(tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext[idx_sni].dis.list, 1, { name = desync.arg.sni_first } )
+				table.insert(tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext[idx_sni].dis.list, 1, { name = desync.arg.sni_first, type = desync.arg.sni_snt_new } )
 			end
 			if desync.arg.sni_last then
-				table.insert(tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext[idx_sni].dis.list, { name = desync.arg.sni_last } )
+				table.insert(tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.ext[idx_sni].dis.list, { name = desync.arg.sni_last, type = desync.arg.sni_snt_new } )
 			end
 		end
 		desync[desync.arg.blob] = tls_reconstruct(tdis)
