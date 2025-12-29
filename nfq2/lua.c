@@ -401,7 +401,7 @@ static int luacall_bu48(lua_State *L)
 
 	int64_t i = (int64_t)luaL_checklint(L,1);
 	if (i>0xFFFFFFFFFFFF || i<-(int64_t)0xFFFFFFFFFFFF) luaL_error(L, "out of range");
-	uint8_t v[4];
+	uint8_t v[6];
 	phton48(v,(uint64_t)i);
 	lua_pushlstring(L,(char*)v,6);
 	return 1;
