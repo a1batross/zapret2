@@ -193,7 +193,7 @@ static int luacall_bitset(lua_State *L)
 	if (from>to || from>47 || to>47)
 		luaL_error(L, "bit range invalid");
 
-	lua_Integer mask = ~((lua_Integer)-1 << (to-from+1));
+	uint64_t mask = ~((uint64_t)-1 << (to-from+1));
 	set = (set & mask) << from;
 	mask <<= from;
 	what = what & ~mask | set;
