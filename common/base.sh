@@ -172,15 +172,24 @@ unique()
 
 is_linked_to_busybox()
 {
-	local IFS F P
-	
+	local IFS F P BB
+
+	BB="$(which busybox)"
+
 	IFS=:
 	for path in $PATH; do
-		F=$path/$1
-		P="$(readlink $F)"
-		if [ -z "$P" ] && [ -x $F ] && [ ! -L $F ]; then return 1; fi
-		[ "${P%busybox*}" != "$P" ] && return
+		F="$path/$1"
+		if [ -L "$F" ]; then
+			P="$(readlink $F)"
+			if [ -z "$P" ] && [ -x $F ] && [ ! -L $F ]; then return 1; fi
+			[ "${P%busybox*}" != "$P" ] && return
+		elif [ -f "$F" -a -n "$BB" ]; then
+			# possible hardlink
+			[ $(get_dir_inode "$F") = $(get_dir_inode "$BB") ]
+			return
+		fi
 	done
+	return 1
 }
 get_dir_inode()
 {
