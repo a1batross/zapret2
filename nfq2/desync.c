@@ -1652,22 +1652,13 @@ static uint8_t dpi_desync_udp_packet_play(
 	if (dis->len_payload)
 	{
 		bool bHaveHost = false, bHostIsIp = false;
-		if (bReverse)
+
+		udp_standard_protocol_probe(dis->data_payload, dis->len_payload, ctrack, &l7proto, &l7payload);
+
+		if (!bReverse)
 		{
-			udp_standard_protocol_probe(dis->data_payload, dis->len_payload, ctrack, &l7proto, &l7payload);
-		}
-		else
-		{
-			struct blob_collection_head *fake;
-			if (IsQUICInitial(dis->data_payload, dis->len_payload))
+			if (l7payload==L7P_QUIC_INITIAL)
 			{
-				DLOG("packet contains QUIC initial\n");
-				l7payload = L7P_QUIC_INITIAL;
-
-				l7proto = L7_QUIC;
-				// update ctrack l7proto here because reasm can happen
-				if (ctrack && ctrack->l7proto == L7_UNKNOWN) ctrack->l7proto = l7proto;
-
 				uint8_t clean[UDP_MAX_REASM], *pclean;
 				size_t clean_len;
 
@@ -1789,14 +1780,9 @@ static uint8_t dpi_desync_udp_packet_play(
 					quic_reasm_cancel(ctrack, "QUIC initial decryption failed");
 				}
 			}
-			else // not QUIC initial
-			{
-				// not quic initial - stop reasm
-				reasm_client_cancel(ctrack);
-
-				udp_standard_protocol_probe(dis->data_payload, dis->len_payload, ctrack, &l7proto, &l7payload);
-			}
 		}
+
+		reasm_client_cancel(ctrack);
 
 		if (bHaveHost)
 		{
