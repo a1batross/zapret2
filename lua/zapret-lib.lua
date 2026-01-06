@@ -1430,7 +1430,7 @@ end
 function is_gzip_file(filename)
 	local f, err = io.open(filename, "r")
 	if not f then
-		error("gunzip_file: "..err)
+		error("is_gzip_file: "..err)
 	end
 	local hdr = f:read(2)
 	f:close()
