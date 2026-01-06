@@ -25,7 +25,7 @@ filter_apply_hostlist_target()
 {
 	# $1 - var name of nfqws params
 
-	local v parm parm1 parm2 parm3 parm4 parm5 parm6 parm7 parm8 parm9 parm10 param11 param12 param13 parmNA
+	local v parm parm1 parm2 parm3 parm4 parm5 parm6 parm7 parm8 parm9 parm10 parm11 parm12 parm13 parmNA
 	eval v="\$$1"
 	if contains "$v" "$HOSTLIST_MARKER" || contains "$v" "$HOSTLIST_NOAUTO_MARKER"; then
 		[ "$MODE_FILTER" = hostlist -o "$MODE_FILTER" = autohostlist ] &&

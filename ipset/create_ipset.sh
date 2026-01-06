@@ -68,7 +68,6 @@ ipset_restore()
 {
 	# $1 - ipset name
 	# $2 - filename
-
 	zzexist "$2" || return
 	local fsize=$(zzsize "$2")
 	local svram=0
@@ -77,7 +76,7 @@ ipset_restore()
 
 	local T="Adding to ipset $1 "
 	[ "$svram" = "1" ] && T="$T (saveram)"
-	T="$T : $f"
+	T="$T : $2"
 	echo $T
 
 	if [ "$svram" = "1" ]; then

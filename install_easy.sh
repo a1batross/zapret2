@@ -601,7 +601,7 @@ check_dns()
 
 install_systemd()
 {
-	INIT_SCRIPT_SRC="$EXEDIR/init.d/sysv/zapret"
+	INIT_SCRIPT_SRC="$EXEDIR/init.d/sysv/zapret2"
 	CUSTOM_DIR="$ZAPRET_RW/init.d/sysv"
 
 	check_bins
