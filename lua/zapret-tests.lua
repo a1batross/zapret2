@@ -632,25 +632,49 @@ end
 function test_resolve()
 	local pos
 
-	pos = zero_based_pos(resolve_multi_pos(fake_default_tls,"tls_client_hello","1,extlen,sniext,host,sld,midsld,endsld,endhost,-5"))
+	local tdis = tls_dissect(fake_default_tls)
+	local extlen_pos = 5 + 6 + 32 + 1 + 2 + 1 + #tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.session_id + #tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.cipher_suites*2 + #tdis.handshake[TLS_HANDSHAKE_TYPE_CLIENT].dis.compression_methods
+	print("fake_default_tls size "..#fake_default_tls.." extlen="..extlen_pos)
+	local m="1,extlen,sniext,host,sld,midsld,endsld,endhost,-5"
+	pos = resolve_multi_pos(fake_default_tls,"tls_client_hello",m,true)
 	test_assert(pos)
-	print("resolve_multi_pos tls : "..table.concat(pos," "))
-	pos = zero_based_pos(resolve_range(fake_default_tls,"tls_client_hello","host,endhost"))
+	print("resolve_multi_pos tls : "..m.." : "..table.concat(pos," "))
+	m = "host,endhost"
+	pos = resolve_range(fake_default_tls,"tls_client_hello",m,false,true)
 	test_assert(pos)
-	print("resolve_range tls : "..table.concat(pos," "))
-	pos = resolve_pos(fake_default_tls,"tls_client_hello","midsld")
+	print("resolve_range tls : "..m.." : "..table.concat(pos," "))
+	m = "1"
+	pos = resolve_pos(fake_default_tls,"tls_client_hello",m,true)
+	test_assert(pos==1)
+	print("resolve_pos tls : "..m.." : "..pos)
+	m = "-1"
+	pos = resolve_pos(fake_default_tls,"tls_client_hello",m,true)
+	test_assert(pos==(#fake_default_tls-1))
+	print("resolve_pos tls : "..m.." : "..pos)
+	m = "extlen"
+	pos = resolve_pos(fake_default_tls,"tls_client_hello",m,true)
+	test_assert(pos==extlen_pos)
+	print("resolve_pos tls : "..m.." : "..pos)
+	m = "midsld"
+	pos = resolve_pos(fake_default_tls,"tls_client_hello",m,true)
 	test_assert(pos)
-	print("resolve_pos tls : "..pos - 1)
-	pos = resolve_pos(fake_default_tls,"tls_client_hello","method")
+	print("resolve_pos tls : "..m.." : "..pos)
+	pos = resolve_pos(fake_default_tls,"tls_client_hello","method",true)
 	test_assert(not pos)
 	print("resolve_pos tls non-existent : "..tostring(pos))
 
-	pos = zero_based_pos(resolve_multi_pos(fake_default_http,"http_req","method,host,sld,midsld,endsld,endhost,-5"))
+	local host_pos = string.find(fake_default_http,"Host: ")+6-1
+	print("fake_default_http size "..#fake_default_http.." host="..host_pos)
+	m = "method,host,sld,midsld,endsld,endhost,-5"
+	pos = resolve_multi_pos(fake_default_http,"http_req",m,true)
 	test_assert(pos)
-	print("resolve_multi_pos http : "..table.concat(pos," "))
-	pos = resolve_pos(fake_default_http,"http_req","sniext")
+	test_assert(pos[1]==0)
+	test_assert(pos[2]==host_pos)
+	print("resolve_multi_pos http : "..m.." : "..table.concat(pos," "))
+	m = "sniext"
+	pos = resolve_pos(fake_default_http,"http_req",m,true)
 	test_assert(not pos)
-	print("resolve_pos http non-existent : "..tostring(pos))
+	print("resolve_pos http non-existent : "..m.." : "..tostring(pos))
 end
 
 function test_rawsend(opts)
