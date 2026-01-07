@@ -124,7 +124,7 @@ zzcat()
 zz()
 {
  if [ "$GZIP_LISTS" = "1" ]; then
-  gzip -c >"$1.gz"
+  gzip -9c >"$1.gz"
   rm -f "$1"
  else
   cat >"$1"
