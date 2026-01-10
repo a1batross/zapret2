@@ -2993,8 +2993,8 @@ On any OS, it is possible to maintain a continuous linear `ip_id` order for a pe
 | tcp_flags_set   | Set TCP flags. Flags are provided as a comma-separated list: FIN, SYN, RST, PUSH, ACK, URG, ECE, CWR.                                                                                                            |
 | tcp_flags_unset | Clear (unset) TCP flags. Follows the same format as `tcp_flags_set`.                                                                                                                                            |
 | tcp_ts_up       | Move the TCP Timestamp option to the very beginning of the options list, if present.                                                                                                                            |
-
 | fool            | Name of the custom fooling function. It takes a dissect and a `fooling_options` table.                                                              |
+
 IPv6 extension headers are added in the following order:
 
 1. hopbyhop
@@ -3437,7 +3437,7 @@ function syndata(ctx, desync)
 - arg: [standard ipfrag](#standard-ipfrag)
 - arg: [standard reconstruct](#standard-reconstruct)
 - arg: [standard rawsend](#standard-rawsend)
-- arg: blob - a [blob](#передача-блобов) containing the fake payload. It must fit into a single packet; segmentation is not possible.
+- arg: blob - a [blob](#passing-blobs) containing the fake payload. It must fit into a single packet; segmentation is not possible.
 - arg: tls_mod - apply the specified tls_mod to the blob payload.
 
 The function adds a payload to the TCP SYN packet, applies modifications to it, and sends it instead of the original, issuing a `VERDICT_DROP`.
@@ -3619,12 +3619,12 @@ function fakedsplit(ctx, desync)
 - arg: [standard rawsend](#standard-rawsend)
 - arg: pos - a single [marker](#маркеры) acting as the split point. Defaults to "2".
 - arg: seqovl - numeric value - an offset relative to the current sequence to create an additional segment part that extends to the left of the TCP window boundary.
-- arg: seqovl_pattern - the [blob](#передача-блобов) used to fill the seqovl. Defaults to 0x00.
-- arg: blob - replaces the current payload with the specified [blob](#передача-блобов).
+- arg: seqovl_pattern - the [blob](#passing-blobs) used to fill the seqovl. Defaults to 0x00.
+- arg: blob - replaces the current payload with the specified [blob](#passing-blobs).
 - arg: optional - skip the operation if the blob is specified but missing. If seqovl_pattern is specified but missing, use the 0x00 pattern.
 - arg: nodrop - prevents issuing a VERDICT_DROP.
 - arg: nofake1, nofake2, nofake3, nofake4 - skip sending specific fake packets.
-- arg: pattern - the [blob](#передача-блобов) used to fill the fake segments. Defaults to 0x00.
+- arg: pattern - the [blob](#passing-blobs) used to fill the fake segments. Defaults to 0x00.
 - Default payload filter: "known"
 
 The function operates similarly to multisplit with a single split point, but it interleaves fake packets between real segments. Fake packets match the size of the segments being sent and are generated based on a pattern with an offset corresponding to the TCP sequence offset of the segment relative to the first one.
@@ -3646,7 +3646,7 @@ The purpose of this technique is to confuse the DPI regarding which data is orig
 - `ipid_opts` and `rawsend_opts` are applied to both fakes and originals. `ipfrag_opts` are not used for either fakes or originals.
 
 If the transmission is successful, a VERDICT_DROP is issued unless "nodrop" is specified.
-The [blob](#передача-блобов) parameter allows replacing the current payload with an arbitrary [blob](#передача-блобов), enabling the transmission of any compatible payload using the same segmentation.
+The [blob](#passing-blobs) parameter allows replacing the current payload with an arbitrary [blob](#passing-blobs), enabling the transmission of any compatible payload using the same segmentation.
 
 ### fakeddisorder
 
