@@ -623,7 +623,6 @@ DESYNC ENGINE INIT:
  --blob=<item_name>:[+ofs]@<filename>|0xHEX             ; load a binary file or hex string into the Lua variable <item_name>. +ofs specifies the offset from the start of the file
  --lua-init=@<filename>|<lua_text>                      ; execute Lua code from a string or file once at startup. supports gzipped files. automatically checks for "<filename>.gz"
  --lua-gc=<int>                                         ; Lua garbage collector invocation interval in seconds. 0 disables periodic calls.
-```
 
 MULTI-STRATEGY:
  --new                                                  ; start a new profile
@@ -704,7 +703,7 @@ LOGICAL NETWORK FILTER:
  --nlm-list[=all]                       ; display a list of connected NLM networks. "all" shows all NLM networks.
 ```
 
-## Using Multiple Profiles
+## Using multiple profiles
 
 Profiles exist to select a specific traffic manipulation strategy based on the specified filter conditions.
 The general scheme for using profiles is as follows:
