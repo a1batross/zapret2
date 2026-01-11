@@ -66,9 +66,9 @@ void phton48(uint8_t *p, uint64_t v);
 uint64_t pntoh64(const uint8_t *p);
 void phton64(uint8_t *p, uint64_t v);
 
-uint16_t swap16(uint16_t u);
-uint32_t swap24(uint32_t u);
-uint64_t swap48(uint64_t u);
+uint16_t bswap16(uint16_t u);
+uint32_t bswap24(uint32_t u);
+uint64_t bswap48(uint64_t u);
 
 bool parse_hex_str(const char *s, uint8_t *pbuf, size_t *size);
 char hex_digit(uint8_t v);

@@ -279,7 +279,7 @@ static int luacall_swap16(lua_State *L)
 	int64_t i = (int64_t)luaL_checklint(L,1);
 	if (i>0xFFFF || i<-(int64_t)0xFFFF) luaL_error(L, "out of range");
 	uint16_t u = (uint16_t)i;
-	lua_pushinteger(L,swap16(u));
+	lua_pushinteger(L,bswap16(u));
 	return 1;
 }
 static int luacall_swap24(lua_State *L)
@@ -289,7 +289,7 @@ static int luacall_swap24(lua_State *L)
 	int64_t i =(int64_t)luaL_checklint(L,1);
 	if (i>0xFFFFFF || i<-(int64_t)0xFFFFFF) luaL_error(L, "out of range");
 	uint32_t u = (uint32_t)i;
-	lua_pushlint(L,swap24(u));
+	lua_pushlint(L,bswap24(u));
 	return 1;
 }
 static int luacall_swap32(lua_State *L)
@@ -309,7 +309,7 @@ static int luacall_swap48(lua_State *L)
 	int64_t i =(int64_t)luaL_checklint(L,1);
 	if (i>0xFFFFFFFFFFFF || i<-(int64_t)0xFFFFFFFFFFFF) luaL_error(L, "out of range");
 	uint64_t u = (uint64_t)i;
-	lua_pushlint(L, swap48(u));
+	lua_pushlint(L, bswap48(u));
 	return 1;
 }
 static int lua_uxadd(lua_State *L, int64_t max)

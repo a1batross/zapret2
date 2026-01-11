@@ -396,16 +396,16 @@ void phton64(uint8_t *p, uint64_t v)
 	p[7] = (uint8_t)v;
 }
 
-uint16_t swap16(uint16_t u)
+uint16_t bswap16(uint16_t u)
 {
 	// __builtin_bswap16 is absent in ancient lexra gcc 4.6
 	return (u>>8) | ((u&0xFF)<<8);
 }
-uint32_t swap24(uint32_t u)
+uint32_t bswap24(uint32_t u)
 {
 	return (u>>16) & 0xFF | u & 0xFF00 | (u<<16) & 0xFF0000;
 }
-uint64_t swap48(uint64_t u)
+uint64_t bswap48(uint64_t u)
 {
 	return ((u & 0xFF0000000000) >> 40) | ((u & 0xFF00000000) >> 24) | ((u & 0xFF000000) >> 8) | ((u & 0xFF0000) << 8) | ((u & 0xFF00) << 24) | ((u & 0xFF) << 40);
 }
