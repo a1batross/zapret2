@@ -2407,26 +2407,30 @@ The HTTP request reconstructor takes a parsed table and recreates the raw string
 .code
   number 200
 .headers
-  .content-type
+  .1
     .pos_header_end
       number 28
     .pos_value_start
       number 31
     .header
       string Content-Type
+    .header_low
+      string content-type
     .value
       string text/html
     .pos_start
       number 17
     .pos_end
       number 39
-  .content-length
+  .2
     .pos_header_end
       number 54
     .pos_value_start
       number 57
     .header
       string Content-Length
+    .header_low
+      string content-length
     .value
       string 650
     .pos_start
