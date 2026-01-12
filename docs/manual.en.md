@@ -1305,7 +1305,7 @@ desync
 | replay_piece_count | number | total number of parts being replayed | |
 | replay_piece_last | bool | indicates the last part being replayed | |
 | l7payload | string | [payload type](#protocol-detection) of the current packet or packet group | defaults to "unknown" if undetermined |
-| l7proto   | string | [flow protocol(#protocol-detection) | defaults to "unknown" if undetermined |
+| l7proto   | string | [flow protocol](#protocol-detection) | defaults to "unknown" if undetermined |
 
 | reasm_data         | string | result of reassembling a multi-packet message, or the payload itself if no reassembly occurred | currently applied only to TCP                             |
 | reasm_offset       | string | offset of the current replayed packet within the reassembled data                            | currently applied only to TCP                             |
