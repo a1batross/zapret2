@@ -5114,6 +5114,8 @@ It's possible to install cygwin and use winws2 inside cygwin installation.
 But it may be more comfortable to use [zapret-win-bundle](https://github.com/bol-van/zapret-win-bundle) which includes minimal cygwin.
 cygwin prompt is pre-configured with aliases for blockcheck, blockcheck2, winws, winws2, winws2 with standard Lua scripts.
 
+32-bit Windows versions are not supported by zapret-win-bundle.
+
 ## Windows 7
 
 Requirements for windows driver signing have changed in 2021.
