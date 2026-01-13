@@ -5128,8 +5128,7 @@ There are several options :
 
 3. Use "BypassESU" patcher. Google it by name.
 
-4. Use `UpdatePack7R2` from simplix : https://blog.simplix.info
-If you are in Russia or Belarus temporary change region in Control Panel.
+4. Use [UpdatePack7R2](https://blog.simplix.info). If you are in Russia or Belarus temporary change region in Control Panel.
 
 ## Windows Server
 
