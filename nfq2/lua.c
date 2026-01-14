@@ -71,16 +71,20 @@ static int luacall_bitlshift(lua_State *L)
 {
 	lua_check_argc(L,"bitlshift",2);
 	int64_t v=(int64_t)luaL_checklint(L,1);
-	if (v>0xFFFFFFFFFFFF || v<-(int64_t)0xFFFFFFFFFFFF) luaL_error(L, "out of range");
-	lua_pushlint(L,(((uint64_t)v) << luaL_checkinteger(L,2)) & 0xFFFFFFFFFFFF);
+	lua_Integer shift = luaL_checkinteger(L,2);
+	if (shift>48 || shift<0 || v>0xFFFFFFFFFFFF || v<-(int64_t)0xFFFFFFFFFFFF) luaL_error(L, "out of range");
+	uint64_t u = v & 0xFFFFFFFFFFFF;
+	lua_pushlint(L,(u << shift) & 0xFFFFFFFFFFFF);
 	return 1;
 }
 static int luacall_bitrshift(lua_State *L)
 {
 	lua_check_argc(L,"bitrshift",2);
 	int64_t v=(int64_t)luaL_checklint(L,1);
-	if (v>0xFFFFFFFFFFFF || v<-(int64_t)0xFFFFFFFFFFFF) luaL_error(L, "out of range");
-	lua_pushlint(L,((uint64_t)v) >> luaL_checkinteger(L,2));
+	lua_Integer shift = luaL_checkinteger(L,2);
+	if (shift>48 || shift<0 || v>0xFFFFFFFFFFFF || v<-(int64_t)0xFFFFFFFFFFFF) luaL_error(L, "out of range");
+	uint64_t u = v & 0xFFFFFFFFFFFF;
+	lua_pushlint(L,u >> shift);
 	return 1;
 }
 static int luacall_bitand(lua_State *L)
@@ -93,7 +97,7 @@ static int luacall_bitand(lua_State *L)
 	{
 		v=(int64_t)luaL_checklint(L,i);
 		if (v>0xFFFFFFFFFFFF || v<-(int64_t)0xFFFFFFFFFFFF) luaL_error(L, "out of range");
-		sum&=(uint64_t)v;
+		sum &= (uint64_t)v;
 	}
 	lua_pushlint(L,sum);
 	return 1;
@@ -108,7 +112,22 @@ static int luacall_bitor(lua_State *L)
 	{
 		v=(int64_t)luaL_checklint(L,i);
 		if (v>0xFFFFFFFFFFFF || v<-(int64_t)0xFFFFFFFFFFFF) luaL_error(L, "out of range");
-		sum|=(uint64_t)v;
+		sum |= (uint64_t)(v & 0xFFFFFFFFFFFF);
+	}
+	lua_pushlint(L,sum);
+	return 1;
+}
+static int luacall_bitxor(lua_State *L)
+{
+	lua_check_argc_range(L,"bitxor",1,100);
+	int argc = lua_gettop(L);
+	int64_t v;
+	uint64_t sum=0;
+	for(int i=1;i<=argc;i++)
+	{
+		v=(int64_t)luaL_checklint(L,i);
+		if (v>0xFFFFFFFFFFFF || v<-(int64_t)0xFFFFFFFFFFFF) luaL_error(L, "out of range");
+		sum ^= (uint64_t)(v & 0xFFFFFFFFFFFF);
 	}
 	lua_pushlint(L,sum);
 	return 1;
@@ -145,21 +164,6 @@ static int luacall_bitnot48(lua_State *L)
 {
 	lua_check_argc(L,"bitnot48",1);
 	return lua_bitnotx(L, 0xFFFFFFFFFFFF);
-}
-static int luacall_bitxor(lua_State *L)
-{
-	lua_check_argc_range(L,"bitxor",1,100);
-	int argc = lua_gettop(L);
-	int64_t v;
-	uint64_t sum=0;
-	for(int i=1;i<=argc;i++)
-	{
-		v=(int64_t)luaL_checklint(L,i);
-		if (v>0xFFFFFFFFFFFF || v<-(int64_t)0xFFFFFFFFFFFF) luaL_error(L, "out of range");
-		sum^=(uint64_t)v;
-	}
-	lua_pushlint(L,sum);
-	return 1;
 }
 static int luacall_bitget(lua_State *L)
 {
@@ -1599,12 +1603,11 @@ static void lua_reconstruct_extract_options(lua_State *L, int idx, bool *badsum,
 static bool lua_reconstruct_ip6exthdr(lua_State *L, int idx, struct ip6_hdr *ip6, size_t *len, uint8_t proto, bool preserve_next)
 {
 	LUA_STACK_GUARD_ENTER(L)
-
 	// proto = last header type
 	if (*len<sizeof(struct tcphdr)) return false;
 
 	uint8_t *last_proto = &ip6->ip6_ctlun.ip6_un1.ip6_un1_nxt;
-	uint8_t filled = sizeof(struct ip6_hdr);
+	size_t filled = sizeof(struct ip6_hdr);
 	lua_getfield(L,idx,"exthdr");
 	if (lua_type(L,-1)==LUA_TTABLE)
 	{
@@ -2277,7 +2280,7 @@ static int luacall_csum_tcp_fix(lua_State *L)
 
 	if (proto_check_ipv4(b_ip, l_ip))
 		ip = (struct ip*)b_ip;
-	else if (proto_check_ipv6(b_ip, sizeof(struct ip6_hdr) + ntohs(((struct ip6_hdr*)b_ip)->ip6_ctlun.ip6_un1.ip6_un1_plen)))
+	else if (proto_check_ipv6(b_ip, l_ip))
 		ip6 = (struct ip6_hdr*)b_ip;
 	else
 		luaL_error(L, "invalid ip header");
@@ -2318,7 +2321,7 @@ static int luacall_csum_udp_fix(lua_State *L)
 
 	if (proto_check_ipv4(b_ip, l_ip))
 		ip = (struct ip*)b_ip;
-	else if (proto_check_ipv6(b_ip, sizeof(struct ip6_hdr) + ntohs(((struct ip6_hdr*)b_ip)->ip6_ctlun.ip6_un1.ip6_un1_plen)))
+	else if (proto_check_ipv6(b_ip, l_ip))
 		ip6 = (struct ip6_hdr*)b_ip;
 	else
 		luaL_error(L, "invalid ip header");

@@ -628,7 +628,7 @@ end
 -- find first tcp options of specified kind in dissect.tcp.options
 function find_tcp_option(options, kind)
 	if options then
-		for i, opt in pairs(options) do
+		for i, opt in ipairs(options) do
 			if opt.kind==kind then return i end
 		end
 	end
@@ -638,7 +638,7 @@ end
 -- find first ipv6 extension header of specified protocol in dissect.ip6.exthdr
 function find_ip6_exthdr(exthdr, proto)
 	if exthdr then
-		for i, hdr in pairs(exthdr) do
+		for i, hdr in ipairs(exthdr) do
 			if hdr.type==proto then return i end
 		end
 	end
@@ -1052,7 +1052,7 @@ function rawsend_dissect_ipfrag(dis, options)
 					if not rawsend_dissect(fragments[i], options.rawsend, reconstruct_frag) then return false end
 				end
 			else
-				for i, d in pairs(fragments) do
+				for i, d in ipairs(fragments) do
 					DLOG("sending ip fragment "..i)
 					-- C function
 					if not rawsend_dissect(d, options.rawsend, reconstruct_frag) then return false end

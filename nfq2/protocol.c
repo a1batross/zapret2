@@ -394,10 +394,11 @@ ssize_t HttpPos(t_marker posmarker, int16_t pos, const uint8_t *data, size_t sz)
 		case PM_HTTP_METHOD:
 			// recognize some tpws pre-applied hacks
 			method=data;
-			if (sz<10) break;
+			if (sz<12) break;
 			if (*method=='\n' || *method=='\r') method++;
 			if (*method=='\n' || *method=='\r') method++;
-			for (p=method,i=0;i<7;i++) if (*p>='A' && *p<='Z') p++;
+			// max length is PROPPATCH
+			for (p=method,i=0;i<9;i++) if (*p>='A' && *p<='Z') p++;
 			if (i<3 || *p!=' ') break;
 			return CheckPos(sz,method-data+pos);
 		case PM_HOST:

@@ -1169,7 +1169,7 @@ static bool parse_ip_list(char *opt, ipset *pp)
 
 static bool parse_strlist(char *opt, struct str_list_head *list)
 {
-	char *e, *p = optarg;
+	char *e, *p = opt;
 	while (p)
 	{
 		e = strchr(p, ',');

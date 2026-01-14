@@ -339,8 +339,7 @@ void proto_skip_udp(const uint8_t **data, size_t *len)
 
 bool proto_check_ipv6(const uint8_t *data, size_t len)
 {
-	return 	len >= sizeof(struct ip6_hdr) && (data[0] & 0xF0) == 0x60 &&
-		(len - sizeof(struct ip6_hdr)) >= ntohs(((struct ip6_hdr*)data)->ip6_ctlun.ip6_un1.ip6_un1_plen);
+	return len >= sizeof(struct ip6_hdr) && (data[0] & 0xF0) == 0x60;
 }
 // move to transport protocol
 // proto_type = 0 => error
