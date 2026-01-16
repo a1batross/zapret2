@@ -3998,9 +3998,6 @@ function tcpseg(ctx, desync)
 function oob(ctx, desync)
 ```
 
--- standard args : fooling, ip_id, rawsend, reconstruct, ipfrag
-
-
 - arg: [standard fooling](#standard-fooling)
 - arg: [standard ipid](#standard-ipid)
 - arg: [standard ipfrag](#standard-ipfrag)
