@@ -789,6 +789,7 @@ end
 -- tcp_flags_set=<list> - set tcp flags in comma separated list
 -- tcp_flags_unset=<list> - unset tcp flags in comma separated list
 -- tcp_ts_up - move timestamp tcp option to the top if it's present. this allows linux not to accept badack segments without badseq. this is very strange discovery but it works.
+-- tcp_nop_del - delete NOP tcp options to free space in tcp header
 
 -- fool - custom fooling function : fool_func(dis, fooling_options)
 function apply_fooling(desync, dis, fooling_options)
@@ -849,6 +850,13 @@ function apply_fooling(desync, dis, fooling_options)
 		end
 		if fooling_options.tcp_flags_set then
 			dis.tcp.th_flags = bitor(dis.tcp.th_flags, parse_tcp_flags(fooling_options.tcp_flags_set))
+		end
+		if fooling_options.tcp_nop_del then
+			for i=#dis.tcp.options,1,-1 do
+				if dis.tcp.options[i].kind==TCP_KIND_NOOP then
+					table.remove(dis.tcp.options,i)
+				end
+			end
 		end
 		if tonumber(fooling_options.tcp_ts) then
 			local idx = find_tcp_option(dis.tcp.options,TCP_KIND_TS)

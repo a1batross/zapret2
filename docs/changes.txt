@@ -187,3 +187,4 @@ v0.8.1
 * zapret-antidpi: oob
 * blockcheck2: 17-oob.sh
 * nfqws2: set desync.tcp_mss to minimum of both ends or default if at least one is unknown
+* zapret-lib: tcp_nop_del

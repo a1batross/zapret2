@@ -3031,9 +3031,10 @@ On any OS, it is possible to maintain a continuous linear `ip_id` order for a pe
 | tcp_ack         | A positive or negative offset for the TCP Acknowledgment Number.                                                                                                                                                |
 | tcp_ts          | A positive or negative offset for the TCP Timestamp. This only functions if the Timestamp option is already present.                                                                                            |
 | tcp_md5         | Add a TCP MD5 Signature header if it is not already present. Defaults to random bytes, but a 16-byte hex string can be specified.                                                                               |
-| tcp_flags_set   | Set TCP flags. Flags are provided as a comma-separated list: FIN, SYN, RST, PUSH, ACK, URG, ECE, CWR.                                                                                                            |
+| tcp_flags_set   | Set TCP flags. Flags are provided as a comma-separated list: FIN, SYN, RST, PUSH, ACK, URG, ECE, CWR.                                                                                                           |
 | tcp_flags_unset | Clear (unset) TCP flags. Follows the same format as `tcp_flags_set`.                                                                                                                                            |
 | tcp_ts_up       | Move the TCP Timestamp option to the very beginning of the options list, if present.                                                                                                                            |
+| tcp_nop_del     | Delete all NOP TCP options to free space in the header                                                                                                                                                          |
 | fool            | Name of the custom fooling function. It takes a dissect and a `fooling_options` table.                                                              |
 
 IPv6 extension headers are added in the following order:

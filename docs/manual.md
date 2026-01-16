@@ -3210,6 +3210,7 @@ Windows заменяет нулевые ip_id на собственную пос
 | tcp_flags_set   | установить флаги TCP. флаги представлены списком через зяпятую : FIN,SYN,RST,PUSH,ACK,FIN,URG,ECE,CWR                                                                               |
 | tcp_flags_unset | снять флаги TCP. аналогично tcp_flags_set                                                                                                                                           |
 | tcp_ts_up       | поднять tcp timestamp опцию в самое начало, если она есть                                                                                                                           |
+| tcp_nop_del     | удалить все TCP опции NOP для освобождения места в заголовке TCP                                                                                                                    |
 | fool            | имя кастомной функции фулинга. она берет диссект и таблицу fooling_options                                                                                                          |
 
 ipv6 extension headers добавляются в следующем порядке:

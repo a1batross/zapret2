@@ -38,6 +38,7 @@ standard fooling :
 * tcp_flags_set=<list> - set tcp flags in comma separated list
 * tcp_flags_unset=<list> - unset tcp flags in comma separated list
 * tcp_ts_up - move timestamp tcp option to the top if present (workaround for badack without badseq fooling)
+* tcp_nop_del - delete NOP tcp options to free space in tcp header
 
 * fool=fool_function - custom fooling function : fool_func(dis, fooling_options)
 
