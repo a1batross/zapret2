@@ -194,3 +194,4 @@ v0.8.1
 
 * winws2, blockcheck2: allow multiple instances in windows, linux, freebsd (not openbsd)
 * nfqws2: fix critical bug - wrong ipv6 dissection
+* zapret-auto: fix standard_failure_detector http redirect regression

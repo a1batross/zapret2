@@ -1558,6 +1558,9 @@ function writefile(filename, data)
 	end
 	local s,err = f:write(data)
 	f:close()
+	if not s then
+		error("writefile: "..err)
+	end
 end
 
 -- DISSECTORS

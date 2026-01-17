@@ -427,7 +427,7 @@ static int luacall_brandom(lua_State *L)
 {
 	lua_check_argc(L,"brandom",1);
 	lua_Integer len = luaL_checkinteger(L,1);
-
+	if (len<0) luaL_error(L, "brandom: invalid arg");
 	uint8_t *p = malloc(len);
 	if (!p) luaL_error(L, "out of memory");
 	fill_random_bytes(p,len);
@@ -440,7 +440,7 @@ static int luacall_brandom_az(lua_State *L)
 {
 	lua_check_argc(L,"brandom_az",1);
 	lua_Integer len = luaL_checkinteger(L,1);
-
+	if (len<0) luaL_error(L, "brandom_az: invalid arg");
 	uint8_t *p = malloc(len);
 	if (!p) luaL_error(L, "out of memory");
 	fill_random_az(p,len);
@@ -453,7 +453,7 @@ static int luacall_brandom_az09(lua_State *L)
 {
 	lua_check_argc(L,"brandom_az09",1);
 	lua_Integer len = luaL_checkinteger(L,1);
-
+	if (len<0) luaL_error(L, "brandom_az09: invalid arg");
 	uint8_t *p = malloc(len);
 	if (!p) luaL_error(L, "out of memory");
 	fill_random_az09(p,len);
@@ -536,6 +536,7 @@ static int luacall_bcryptorandom(lua_State *L)
 	LUA_STACK_GUARD_ENTER(L)
 
 	lua_Integer len = luaL_checkinteger(L,1);
+	if (len<0) luaL_error(L, "bcryptorandom: invalid arg");
 
 	uint8_t *p = malloc(len);
 	if (!p) luaL_error(L, "out of memory");
@@ -691,7 +692,8 @@ static int luacall_hkdf(lua_State *L)
 	const uint8_t *ikm = lua_type(L,3) == LUA_TNIL ? NULL : (uint8_t*)luaL_checklstring(L,3,&ikm_len);
 	size_t info_len=0;
 	const uint8_t *info = lua_type(L,4) == LUA_TNIL ? NULL : (uint8_t*)luaL_checklstring(L,4,&info_len);
-	size_t okm_len = (size_t)luaL_checkinteger(L,5);
+	lua_Integer okm_len = luaL_checkinteger(L,5);
+	if (okm_len<0) luaL_error(L, "hkdf: invalid arg");
 
 	uint8_t *okm = malloc(okm_len);
 	if (!okm) luaL_error(L, "out of memory");
@@ -2411,6 +2413,7 @@ static void lua_rawsend_extract_options(lua_State *L, int idx, int *repeats, uin
 		{
 			lua_getfield(L,idx,"repeats");
 			*repeats=(int)lua_tointeger(L,-1);
+			if (*repeats<0) luaL_error(L, "rawsend: negative repeats");
 			if (!*repeats) *repeats=1;
 			lua_pop(L,1);
 		}
