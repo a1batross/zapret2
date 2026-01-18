@@ -1298,11 +1298,6 @@ static uint8_t dpi_desync_tcp_packet_play(
 		if (l7payload==L7P_HTTP_REQ)
 		{
 			bHaveHost = HttpExtractHost(rdata_payload, rlen_payload, host, sizeof(host));
-			if (!bHaveHost)
-			{
-				DLOG("not applying tampering to HTTP without Host:\n");
-				goto pass;
-			}
 		}
 		else if (l7payload==L7P_TLS_CLIENT_HELLO || l7proto==L7_TLS && l7payload==L7P_UNKNOWN && ctrack_replay && !ReasmIsEmpty(&ctrack_replay->reasm_client))
 		{
