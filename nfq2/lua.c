@@ -2687,6 +2687,9 @@ static void lua_mt_init_zstream(lua_State *L)
 	luaL_newmetatable(L, "userdata_zstream");
 	lua_pushcfunction(L, lua_cfunc_zstream_gc);
 	lua_setfield(L, -2, "__gc");
+	// Lua 5.5+ to-be-closed var
+	lua_pushcfunction(L, lua_cfunc_zstream_gc);
+	lua_setfield(L, -2, "__close");
 	lua_pop(L,1);
 
 	LUA_STACK_GUARD_LEAVE(L, 0)
