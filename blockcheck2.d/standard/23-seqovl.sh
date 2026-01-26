@@ -45,19 +45,19 @@ pktws_seqovl_tests_tls()
 	pat=${SEQOVL_PATTERN_HTTPS:+seqovl_pat}
 	pat=${pat:-fake_default_tls}
 	rnd_mod="--lua-init=$pat=tls_mod($pat,'rnd')"
-	padencap_mod="--lua-desync=luaexec:code=desync.pat=tls_mod($pat,'rnd,dupsid,padencap',desync.reasm_data)"
+	padencap_mod="--lua-desync=luaexec:code=desync.patmod=tls_mod($pat,'rnd,dupsid,padencap',desync.reasm_data)"
 
 	ok=0
 	pktws_curl_test_update $testf $domain $pre $PAYLOAD --lua-desync=tcpseg:pos=0,-1:seqovl=1 --lua-desync=drop && ok=1
 	pktws_curl_test_update $testf $domain ${SEQOVL_PATTERN_HTTPS:+--blob=$pat:@"$SEQOVL_PATTERN_HTTPS" }$rnd_mod $pre $PAYLOAD --lua-desync=tcpseg:pos=0,-1:seqovl=#$pat:seqovl_pattern=$pat --lua-desync=drop && ok=1
-	pktws_curl_test_update $testf $domain ${SEQOVL_PATTERN_HTTPS:+--blob=$pat:@"$SEQOVL_PATTERN_HTTPS" }$pre $PAYLOAD $padencap_mod --lua-desync=tcpseg:pos=0,-1:seqovl=#$pat:seqovl_pattern=$pat --lua-desync=drop && ok=1
+	pktws_curl_test_update $testf $domain ${SEQOVL_PATTERN_HTTPS:+--blob=$pat:@"$SEQOVL_PATTERN_HTTPS" }$pre $PAYLOAD $padencap_mod --lua-desync=tcpseg:pos=0,-1:seqovl=#patmod:seqovl_pattern=patmod --lua-desync=drop && ok=1
 	ok_any=$ok
 
 	ok=0
 	for split in 10 10,sniext+1 10,sniext+4 10,midsld; do
 		pktws_curl_test_update $testf $domain $pre $PAYLOAD --lua-desync=multisplit:pos=$split:seqovl=1 && ok=1
 		pktws_curl_test_update $testf $domain ${SEQOVL_PATTERN_HTTPS:+--blob=$pat:@"$SEQOVL_PATTERN_HTTPS" }$rnd_mod $pre $PAYLOAD --lua-desync=multisplit:pos=$split:seqovl=#$pat:seqovl_pattern=$pat && ok=1
-		pktws_curl_test_update $testf $domain ${SEQOVL_PATTERN_HTTPS:+--blob=$pat:@"$SEQOVL_PATTERN_HTTPS" }$pre $PAYLOAD $padencap_mod --lua-desync=multisplit:pos=$split:seqovl=#$pat:seqovl_pattern=$pat && ok=1
+		pktws_curl_test_update $testf $domain ${SEQOVL_PATTERN_HTTPS:+--blob=$pat:@"$SEQOVL_PATTERN_HTTPS" }$pre $PAYLOAD $padencap_mod --lua-desync=multisplit:pos=$split:seqovl=#patmod:seqovl_pattern=patmod && ok=1
 		[ "$ok" = 1 -a "$SCANLEVEL" != force ] && break
 	done
 	for split in '1 2' 'sniext sniext+1' 'sniext+3 sniext+4' 'midsld-1 midsld' '1 2,midsld'; do
