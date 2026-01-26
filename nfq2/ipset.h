@@ -6,7 +6,10 @@
 #include "pools.h"
 
 bool LoadAllIpsets();
-bool IpsetCheck(const struct desync_profile *dp, const struct in_addr *ipv4, const struct in6_addr *ipv6);
+bool IpsetCheck(
+	const struct desync_profile *dp,
+	const struct in_addr *ipv4, const struct in6_addr *ipv6,
+	const struct in_addr *ipv4r, const struct in6_addr *ipv6r);
 struct ipset_file *RegisterIpset(struct desync_profile *dp, bool bExclude, const char *filename);
 void IpsetsDebug();
 bool AppendIpsetItem(ipset *ips, char *ip);

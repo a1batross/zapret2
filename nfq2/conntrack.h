@@ -105,7 +105,7 @@ bool ConntrackPoolFeed(t_conntrack *p, const struct dissect *dis, t_ctrack **ctr
 // do not create, do not update. only find existing
 bool ConntrackPoolDoubleSearch(t_conntrack *p, const struct dissect *dis, t_ctrack **ctrack, bool *bReverse);
 bool ConntrackPoolDrop(t_conntrack *p, const struct dissect *dis);
-void ConntrackExtractConn(t_conn *c, bool bReverse, const struct dissect *dis);
+bool ConntrackExtractConn(t_conn *c, bool bReverse, const struct dissect *dis);
 void ConntrackPoolDump(const t_conntrack *p);
 void ConntrackPoolPurge(t_conntrack *p);
 void ConntrackClearHostname(t_ctrack *track);

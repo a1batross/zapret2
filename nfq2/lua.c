@@ -1,15 +1,37 @@
 #include <time.h>
 #include <fcntl.h>
 #include <sys/utsname.h>
+#include <netinet/in.h>
 #include <unistd.h>
-#ifdef __FreeBSD__
-#include <sys/thr.h>
-#elif defined(__linux__)
-#include <sys/syscall.h>
-#elif defined(__CYGWIN__)
-#include <processthreadsapi.h>
-#endif
+#include <net/if.h>
 #include <errno.h>
+#include <ifaddrs.h>
+#include <sys/ioctl.h>
+
+#ifdef __FreeBSD__
+
+#include <sys/thr.h>
+
+#elif defined(__linux__)
+
+#include <sys/syscall.h>
+
+#elif defined(__CYGWIN__)
+
+#include <processthreadsapi.h>
+
+// header hell conflicts between unix and win32
+typedef struct in6_addr IN6_ADDR, *PIN6_ADDR, *LPIN6_ADDR;
+typedef struct sockaddr	*LPSOCKADDR;
+typedef struct _SOCKET_ADDRESS {
+  LPSOCKADDR lpSockaddr;
+  int iSockaddrLength;
+} SOCKET_ADDRESS,*PSOCKET_ADDRESS,*LPSOCKET_ADDRESS;
+#define _WINSOCK2API_
+#define _NETIOAPI_H_
+#include <iphlpapi.h>
+
+#endif
 
 #include "lua.h"
 #include "params.h"
@@ -66,6 +88,18 @@ static int luacall_DLOG_CONDUP(lua_State *L)
 	DLOG_CONDUP("LUA: %s\n",luaL_checkstring(L,1));
 	return 0;
 }
+
+const char *lua_reqlstring(lua_State *L,int idx,size_t *len)
+{
+	luaL_checktype(L,idx,LUA_TSTRING);
+	return lua_tolstring(L,idx,len);
+}
+const char *lua_reqstring(lua_State *L,int idx)
+{
+	luaL_checktype(L,idx,LUA_TSTRING);
+	return lua_tostring(L,idx);
+}
+
 
 static int luacall_bitlshift(lua_State *L)
 {
@@ -213,7 +247,7 @@ static int luacall_u8(lua_State *L)
 	int argc=lua_gettop(L);
 	size_t l;
 	lua_Integer offset;
-	const uint8_t *p = (uint8_t*)luaL_checklstring(L,1,&l);
+	const uint8_t *p = (uint8_t*)lua_reqlstring(L,1,&l);
 	offset = (argc>=2 && lua_type(L,2)!=LUA_TNIL) ? luaL_checkinteger(L,2)-1 : 0;
 	if (offset<0 || (offset+1)>l) luaL_error(L, "out of range");
 
@@ -227,7 +261,7 @@ static int luacall_u16(lua_State *L)
 	int argc=lua_gettop(L);
 	size_t l;
 	lua_Integer offset;
-	const uint8_t *p = (uint8_t*)luaL_checklstring(L,1,&l);
+	const uint8_t *p = (uint8_t*)lua_reqlstring(L,1,&l);
 	offset = (argc>=2 && lua_type(L,2)!=LUA_TNIL) ? luaL_checkinteger(L,2)-1 : 0;
 	if (offset<0 || (offset+2)>l) luaL_error(L, "out of range");
 
@@ -241,7 +275,7 @@ static int luacall_u24(lua_State *L)
 	int argc=lua_gettop(L);
 	size_t l;
 	lua_Integer offset;
-	const uint8_t *p = (uint8_t*)luaL_checklstring(L,1,&l);
+	const uint8_t *p = (uint8_t*)lua_reqlstring(L,1,&l);
 	offset = (argc>=2 && lua_type(L,2)!=LUA_TNIL) ? luaL_checkinteger(L,2)-1 : 0;
 	if (offset<0 || (offset+3)>l) luaL_error(L, "out of range");
 
@@ -255,7 +289,7 @@ static int luacall_u32(lua_State *L)
 	int argc=lua_gettop(L);
 	size_t l;
 	lua_Integer offset;
-	const uint8_t *p = (uint8_t*)luaL_checklstring(L,1,&l);
+	const uint8_t *p = (uint8_t*)lua_reqlstring(L,1,&l);
 	offset = (argc>=2 && lua_type(L,2)!=LUA_TNIL) ? luaL_checkinteger(L,2)-1 : 0;
 	if (offset<0 || (offset+4)>l) luaL_error(L, "out of range");
 
@@ -269,7 +303,7 @@ static int luacall_u48(lua_State *L)
 	int argc=lua_gettop(L);
 	size_t l;
 	lua_Integer offset;
-	const uint8_t *p = (uint8_t*)luaL_checklstring(L,1,&l);
+	const uint8_t *p = (uint8_t*)lua_reqlstring(L,1,&l);
 	offset = (argc>=2 && lua_type(L,2)!=LUA_TNIL) ? luaL_checkinteger(L,2)-1 : 0;
 	if (offset<0 || (offset+6)>l) luaL_error(L, "out of range");
 
@@ -495,7 +529,7 @@ static int luacall_parse_hex(lua_State *L)
 	LUA_STACK_GUARD_ENTER(L)
 
 	size_t l;
-	const char *hex = luaL_checklstring(L,1,&l);
+	const char *hex = lua_reqlstring(L,1,&l);
 	if ((l&1)) goto err;
 	l>>=1;
 	uint8_t *p = malloc(l);
@@ -553,6 +587,40 @@ static int luacall_bcryptorandom(lua_State *L)
 
 	LUA_STACK_GUARD_RETURN(L,1)
 }
+
+static int luac_bop(lua_State *L, const char *name, void (*op)(const uint8_t *x1, const uint8_t *x2, uint8_t *result, size_t sz))
+{
+	lua_check_argc(L,name,2);
+
+	LUA_STACK_GUARD_ENTER(L)
+
+	size_t sz1,sz2;
+	const uint8_t *d1 = (const uint8_t*)lua_reqlstring(L,1,&sz1);
+	const uint8_t *d2 = (const uint8_t*)lua_reqlstring(L,2,&sz2);
+	if (sz1!=sz2) luaL_error(L, "string lengths must be the same\n");
+	uint8_t *d3 = malloc(sz1);
+	if (!d3) luaL_error(L, "out of memory");
+
+	op(d1,d2,d3,sz1);
+
+	lua_pushlstring(L,(char*)d3,sz1);
+	free(d3);
+
+	LUA_STACK_GUARD_RETURN(L,1)
+}
+static int luacall_bxor(lua_State *L)
+{
+	return luac_bop(L,"bxor",bxor);
+}
+static int luacall_bor(lua_State *L)
+{
+	return luac_bop(L,"bor",bor);
+}
+static int luacall_band(lua_State *L)
+{
+	return luac_bop(L,"band",band);
+}
+
 static int luacall_hash(lua_State *L)
 {
 	// hash(hash_type, data) returns hash
@@ -564,7 +632,7 @@ static int luacall_hash(lua_State *L)
 	SHAversion sha_ver = lua_hash_type(L, s_hash_type);
 
 	size_t data_len;
-	const uint8_t *data = (uint8_t*)luaL_checklstring(L,2,&data_len);
+	const uint8_t *data = (uint8_t*)lua_reqlstring(L,2,&data_len);
 
 	unsigned char hash[USHAMaxHashSize];
 	USHAContext tcontext;
@@ -585,11 +653,11 @@ static int luacall_aes(lua_State *L)
 
 	bool bEncrypt = lua_toboolean(L,1);
 	size_t key_len;
-	const uint8_t *key = (uint8_t*)luaL_checklstring(L,2,&key_len);
+	const uint8_t *key = (uint8_t*)lua_reqlstring(L,2,&key_len);
 	if (key_len!=16 && key_len!=24 && key_len!=32)
 		luaL_error(L, "aes: wrong key length %u. should be 16,24,32.", (unsigned)key_len);
 	size_t input_len;
-	const uint8_t *input = (uint8_t*)luaL_checklstring(L,3,&input_len);
+	const uint8_t *input = (uint8_t*)lua_reqlstring(L,3,&input_len);
 	if (input_len!=16)
 		luaL_error(L, "aes: wrong data length %u. should be 16.", (unsigned)input_len);
 
@@ -613,17 +681,17 @@ static int luacall_aes_gcm(lua_State *L)
 	int argc = lua_gettop(L);
 	bool bEncrypt = lua_toboolean(L,1);
 	size_t key_len;
-	const uint8_t *key = (uint8_t*)luaL_checklstring(L,2,&key_len);
+	const uint8_t *key = (uint8_t*)lua_reqlstring(L,2,&key_len);
 	if (key_len!=16 && key_len!=24 && key_len!=32)
 		luaL_error(L, "aes_gcm: wrong key length %u. should be 16,24,32.", (unsigned)key_len);
 	size_t iv_len;
-	const uint8_t *iv = (uint8_t*)luaL_checklstring(L,3,&iv_len);
+	const uint8_t *iv = (uint8_t*)lua_reqlstring(L,3,&iv_len);
 	if (iv_len!=12)
 		luaL_error(L, "aes_gcm: wrong iv length %u. should be 12.", (unsigned)iv_len);
 	size_t input_len;
-	const uint8_t *input = (uint8_t*)luaL_checklstring(L,4,&input_len);
+	const uint8_t *input = (uint8_t*)lua_reqlstring(L,4,&input_len);
 	size_t add_len=0;
-	const uint8_t *add = lua_isnoneornil(L,5) ? NULL : (uint8_t*)luaL_checklstring(L,5,&add_len);
+	const uint8_t *add = lua_isnoneornil(L,5) ? NULL : (uint8_t*)lua_reqlstring(L,5,&add_len);
 
 	uint8_t atag[16];
 	uint8_t *output = malloc(input_len);
@@ -652,12 +720,12 @@ static int luacall_aes_ctr(lua_State *L)
 	LUA_STACK_GUARD_ENTER(L)
 
 	size_t key_len;
-	const uint8_t *key = (uint8_t*)luaL_checklstring(L,1,&key_len);
+	const uint8_t *key = (uint8_t*)lua_reqlstring(L,1,&key_len);
 	if (key_len!=16 && key_len!=24 && key_len!=32)
 		luaL_error(L, "aes_ctr: wrong key length %u. should be 16,24,32.", (unsigned)key_len);
 
 	size_t iv_len;
-	const uint8_t *iv = (uint8_t*)luaL_checklstring(L,2,&iv_len);
+	const uint8_t *iv = (uint8_t*)lua_reqlstring(L,2,&iv_len);
 	if (iv_len!=16)
 		luaL_error(L, "aes_ctr: wrong iv length %u. should be 16.", (unsigned)iv_len);
 
@@ -1175,6 +1243,32 @@ void lua_pushf_blob(lua_State *L, int idx_desync, const char *field, const char 
 	lua_rawset(L,-3);
 }
 
+void lua_push_ipaddr(lua_State *L, const struct sockaddr *sa)
+{
+	switch(sa ? sa->sa_family : 0)
+	{
+		case AF_INET:
+			lua_pushlstring(L, (const char*)&((struct sockaddr_in*)sa)->sin_addr, sizeof(struct in_addr));
+			break;
+		case AF_INET6:
+			lua_pushlstring(L, (const char*)&((struct sockaddr_in6*)sa)->sin6_addr, sizeof(struct in6_addr));
+			break;
+		default:
+			lua_pushnil(L);
+	}
+}
+void lua_pushf_ipaddr(lua_State *L, const char *field, const struct sockaddr *sa)
+{
+	lua_pushstring(L, field);
+	lua_push_ipaddr(L,sa);
+	lua_rawset(L,-3);
+}
+void lua_pushi_ipaddr(lua_State *L, lua_Integer idx, const struct sockaddr *sa)
+{
+	lua_pushinteger(L, idx);
+	lua_push_ipaddr(L,sa);
+	lua_rawset(L,-3);
+}
 
 void lua_pushf_tcphdr_options(lua_State *L, const struct tcphdr *tcp, size_t len)
 {
@@ -1217,11 +1311,10 @@ void lua_pushf_tcphdr_options(lua_State *L, const struct tcphdr *tcp, size_t len
 	LUA_STACK_GUARD_LEAVE(L, 0)
 }
 
-void lua_pushf_tcphdr(lua_State *L, const struct tcphdr *tcp, size_t len)
+void lua_push_tcphdr(lua_State *L, const struct tcphdr *tcp, size_t len)
 {
 	LUA_STACK_GUARD_ENTER(L)
 
-	lua_pushliteral(L, "tcp");
 	if (tcp && len>=sizeof(struct tcphdr))
 	{
 		lua_createtable(L, 0, 11);
@@ -1239,15 +1332,37 @@ void lua_pushf_tcphdr(lua_State *L, const struct tcphdr *tcp, size_t len)
 	}
 	else
 		lua_pushnil(L);
+
+	LUA_STACK_GUARD_LEAVE(L, 1)
+}
+void lua_pushf_tcphdr(lua_State *L, const struct tcphdr *tcp, size_t len)
+{
+	LUA_STACK_GUARD_ENTER(L)
+
+	lua_pushliteral(L, "tcp");
+	lua_push_tcphdr(L,tcp,len);
 	lua_rawset(L,-3);
 
 	LUA_STACK_GUARD_LEAVE(L, 0)
 }
-void lua_pushf_udphdr(lua_State *L, const struct udphdr *udp, size_t len)
+static int luacall_dissect_tcphdr(lua_State *L)
+{
+	// dissect_tcphdr(tcphdr_data)
+	lua_check_argc(L,"dissect_tcphdr",1);
+
+	LUA_STACK_GUARD_ENTER(L)
+
+	size_t len;
+	const uint8_t *data = (const uint8_t*)lua_reqlstring(L, 1, &len);
+
+	lua_push_tcphdr(L, (struct tcphdr*)data, len);
+
+	LUA_STACK_GUARD_RETURN(L,1)
+}
+void lua_push_udphdr(lua_State *L, const struct udphdr *udp, size_t len)
 {
 	LUA_STACK_GUARD_ENTER(L)
 
-	lua_pushliteral(L, "udp");
 	if (udp && len>=sizeof(struct udphdr))
 	{
 		lua_createtable(L, 0, 4);
@@ -1258,15 +1373,77 @@ void lua_pushf_udphdr(lua_State *L, const struct udphdr *udp, size_t len)
 	}
 	else
 		lua_pushnil(L);
+
+	LUA_STACK_GUARD_LEAVE(L, 1)
+}
+void lua_pushf_udphdr(lua_State *L, const struct udphdr *udp, size_t len)
+{
+	LUA_STACK_GUARD_ENTER(L)
+
+	lua_pushliteral(L, "udp");
+	lua_push_udphdr(L,udp,len);
 	lua_rawset(L,-3);
 
 	LUA_STACK_GUARD_LEAVE(L, 0)
 }
-void lua_pushf_iphdr(lua_State *L, const struct ip *ip, size_t len)
+static int luacall_dissect_udphdr(lua_State *L)
+{
+	// dissect_udphdr(udphdr_data)
+	lua_check_argc(L,"dissect_udphdr",1);
+
+	LUA_STACK_GUARD_ENTER(L)
+
+	size_t len;
+	const uint8_t *data = (const uint8_t*)lua_reqlstring(L, 1, &len);
+
+	lua_push_udphdr(L, (struct udphdr*)data, len);
+
+	LUA_STACK_GUARD_RETURN(L,1)
+}
+void lua_push_icmphdr(lua_State *L, const struct icmp46 *icmp, size_t len)
 {
 	LUA_STACK_GUARD_ENTER(L)
 
-	lua_pushliteral(L, "ip");
+	if (icmp && len>=sizeof(struct icmp46))
+	{
+		lua_createtable(L, 0, 4);
+		lua_pushf_int(L,"icmp_type",icmp->icmp_type);
+		lua_pushf_int(L,"icmp_code",icmp->icmp_code);
+		lua_pushf_int(L,"icmp_cksum",ntohs(icmp->icmp_cksum));
+		lua_pushf_int(L,"icmp_data",ntohl(icmp->icmp_data32));
+	}
+	else
+		lua_pushnil(L);
+
+	LUA_STACK_GUARD_LEAVE(L, 1)
+}
+void lua_pushf_icmphdr(lua_State *L, const struct icmp46 *icmp, size_t len)
+{
+	LUA_STACK_GUARD_ENTER(L)
+
+	lua_pushliteral(L, "icmp");
+	lua_push_icmphdr(L,icmp,len);
+	lua_rawset(L,-3);
+
+	LUA_STACK_GUARD_LEAVE(L, 0)
+}
+static int luacall_dissect_icmphdr(lua_State *L)
+{
+	// dissect_icmphdr(icmphdr_data)
+	lua_check_argc(L,"dissect_icmphdr",1);
+
+	LUA_STACK_GUARD_ENTER(L)
+
+	size_t len;
+	const uint8_t *data = (const uint8_t*)lua_reqlstring(L, 1, &len);
+
+	lua_push_icmphdr(L, (struct icmp46*)data, len);
+
+	LUA_STACK_GUARD_RETURN(L,1)
+}
+void lua_push_iphdr(lua_State *L, const struct ip *ip, size_t len)
+{
+	LUA_STACK_GUARD_ENTER(L)
 	if (ip && len>=sizeof(struct ip))
 	{
 		uint16_t hl = ip->ip_hl<<2;
@@ -1288,9 +1465,30 @@ void lua_pushf_iphdr(lua_State *L, const struct ip *ip, size_t len)
 	}
 	else
 		lua_pushnil(L);
-	lua_rawset(L,-3);
 
+	LUA_STACK_GUARD_LEAVE(L, 1)
+}
+void lua_pushf_iphdr(lua_State *L, const struct ip *ip, size_t len)
+{
+	LUA_STACK_GUARD_ENTER(L)
+	lua_pushliteral(L, "ip");
+	lua_push_iphdr(L,ip,len);
+	lua_rawset(L,-3);
 	LUA_STACK_GUARD_LEAVE(L, 0)
+}
+static int luacall_dissect_iphdr(lua_State *L)
+{
+	// dissect_iphdr(iphdr_data)
+	lua_check_argc(L,"dissect_iphdr",1);
+
+	LUA_STACK_GUARD_ENTER(L)
+
+	size_t len;
+	const uint8_t *data = (const uint8_t*)lua_reqlstring(L, 1, &len);
+
+	lua_push_iphdr(L, (struct ip*)data, len);
+
+	LUA_STACK_GUARD_RETURN(L,1)
 }
 void lua_pushf_ip6exthdr(lua_State *L, const struct ip6_hdr *ip6, size_t len)
 {
@@ -1358,11 +1556,10 @@ end:
 
 	LUA_STACK_GUARD_LEAVE(L, 0)
 }
-void lua_pushf_ip6hdr(lua_State *L, const struct ip6_hdr *ip6, size_t len)
+void lua_push_ip6hdr(lua_State *L, const struct ip6_hdr *ip6, size_t len)
 {
 	LUA_STACK_GUARD_ENTER(L)
 
-	lua_pushliteral(L, "ip6");
 	if (ip6)
 	{
 		lua_createtable(L, 0, 7);
@@ -1376,9 +1573,32 @@ void lua_pushf_ip6hdr(lua_State *L, const struct ip6_hdr *ip6, size_t len)
 	}
 	else
 		lua_pushnil(L);
+
+	LUA_STACK_GUARD_LEAVE(L, 1)
+}
+void lua_pushf_ip6hdr(lua_State *L, const struct ip6_hdr *ip6, size_t len)
+{
+	LUA_STACK_GUARD_ENTER(L)
+
+	lua_pushliteral(L, "ip6");
+	lua_push_ip6hdr(L,ip6,len);
 	lua_rawset(L,-3);
 
 	LUA_STACK_GUARD_LEAVE(L, 0)
+}
+static int luacall_dissect_ip6hdr(lua_State *L)
+{
+	// dissect_iphdr(ip6hdr_data)
+	lua_check_argc(L,"dissect_ip6hdr",1);
+
+	LUA_STACK_GUARD_ENTER(L)
+
+	size_t len;
+	const uint8_t *data = (const uint8_t*)lua_reqlstring(L, 1, &len);
+
+	lua_push_ip6hdr(L, (struct ip6_hdr*)data, len);
+
+	LUA_STACK_GUARD_RETURN(L,1)
 }
 void lua_push_dissect(lua_State *L, const struct dissect *dis)
 {
@@ -1386,11 +1606,12 @@ void lua_push_dissect(lua_State *L, const struct dissect *dis)
 
 	if (dis)
 	{
-		lua_createtable(L, 0, 9);
+		lua_createtable(L, 0, 10);
 		lua_pushf_iphdr(L,dis->ip, dis->len_l3);
 		lua_pushf_ip6hdr(L,dis->ip6, dis->len_l3);
 		lua_pushf_tcphdr(L,dis->tcp, dis->len_l4);
 		lua_pushf_udphdr(L,dis->udp, dis->len_l4);
+		lua_pushf_icmphdr(L,dis->icmp, dis->len_l4);
 		lua_pushf_int(L,"l4proto",dis->proto);
 		lua_pushf_int(L,"transport_len",dis->transport_len);
 		lua_pushf_int(L,"l3_len",dis->len_l3);
@@ -1455,7 +1676,7 @@ void lua_pushf_ctrack(lua_State *L, const t_ctrack *ctrack, const t_ctrack_posit
 			lua_pushf_nil(L, "incoming_ttl");
 		lua_pushf_str(L, "l7proto", l7proto_str(ctrack->l7proto));
 		lua_pushf_str(L, "hostname", ctrack->hostname);
-		lua_pushf_bool(L, "hostname_is_ip", ctrack->hostname_is_ip);
+		if (ctrack->hostname) lua_pushf_bool(L, "hostname_is_ip", ctrack->hostname_is_ip);
 		lua_pushf_reg(L, "lua_state", ctrack->lua_state);
 		lua_pushf_bool(L, "lua_in_cutoff", ctrack->b_lua_in_cutoff);
 		lua_pushf_bool(L, "lua_out_cutoff", ctrack->b_lua_out_cutoff);
@@ -1573,10 +1794,11 @@ void lua_pushf_range(lua_State *L, const char *name, const struct packet_range *
 }
 
 
-static void lua_reconstruct_extract_options(lua_State *L, int idx, bool *badsum, bool *ip6_preserve_next, uint8_t *ip6_last_proto)
+static void lua_reconstruct_extract_options(lua_State *L, int idx, bool *keepsum, bool *badsum, bool *ip6_preserve_next, uint8_t *ip6_last_proto)
 {
 	if (lua_isnoneornil(L,idx))
 	{
+		if (keepsum) *keepsum = false;
 		if (badsum) *badsum = false;
 		if (ip6_preserve_next) *ip6_preserve_next = false;
 		if (ip6_last_proto) *ip6_last_proto = IPPROTO_NONE;
@@ -1584,6 +1806,12 @@ static void lua_reconstruct_extract_options(lua_State *L, int idx, bool *badsum,
 	else
 	{
 		luaL_checktype(L, idx, LUA_TTABLE);
+		if (keepsum)
+		{
+			lua_getfield(L, idx,"keepsum");
+			*keepsum = lua_type(L,-1)!=LUA_TNIL && (lua_type(L,-1)!=LUA_TBOOLEAN || lua_toboolean(L,-1));
+			lua_pop(L,1);
+		}
 		if (badsum)
 		{
 			lua_getfield(L, idx,"badsum");
@@ -1659,6 +1887,7 @@ static bool lua_reconstruct_ip6exthdr(lua_State *L, int idx, struct ip6_hdr *ip6
 			}
 		}
 	}
+
 	// set last header proto
 	if (!preserve_next) *last_proto = proto;
 
@@ -1684,11 +1913,6 @@ bool lua_reconstruct_ip6hdr(lua_State *L, int idx, struct ip6_hdr *ip6, size_t *
 	ip6->ip6_ctlun.ip6_un1.ip6_un1_flow = htonl(lua_type(L,-1)==LUA_TNUMBER ? (uint32_t)lua_tolint(L,-1) : 0x60000000);
 	lua_pop(L, 1);
 
-	lua_getfield(L,idx,"ip6_plen");
-	ip6->ip6_ctlun.ip6_un1.ip6_un1_plen = htons((uint16_t)lua_tointeger(L,-1));
-
-	lua_pop(L, 1);
-
 	lua_getfield(L,idx,"ip6_nxt");
 	ip6->ip6_ctlun.ip6_un1.ip6_un1_nxt = (uint8_t)lua_tointeger(L,-1);
 	lua_pop(L, 1);
@@ -1711,12 +1935,28 @@ bool lua_reconstruct_ip6hdr(lua_State *L, int idx, struct ip6_hdr *ip6, size_t *
 	ip6->ip6_dst = *(struct in6_addr*)p;
 	lua_pop(L, 1);
 
+	bool have_plen = false;
+	lua_getfield(L,idx,"ip6_plen");
+	switch (lua_type(L,-1))
+	{
+		case LUA_TNIL:
+			break;
+		case LUA_TNUMBER:
+			ip6->ip6_ctlun.ip6_un1.ip6_un1_plen = htons((uint16_t)luaL_checkinteger(L,-1));
+			have_plen = true;
+			break;
+		default:
+			luaL_error(L,"reconstruct_ip6hdr: ip6_plen wrong type");
+	}
+	lua_pop(L, 1);
+
 	bool b = lua_reconstruct_ip6exthdr(L, idx, ip6, len, last_proto, preserve_next);
+	if (b && !have_plen) ip6->ip6_ctlun.ip6_un1.ip6_un1_plen = htons((uint16_t)(*len-sizeof(struct ip6_hdr)));
+
 	LUA_STACK_GUARD_LEAVE(L, 0)
 	return b;
 err:
 	lua_pop(L, 1);
-
 	LUA_STACK_GUARD_LEAVE(L, 0)
 	return false;
 }
@@ -1732,7 +1972,7 @@ static int luacall_reconstruct_ip6hdr(lua_State *L)
 	uint8_t last_proto;
 	bool preserve_next;
 
-	lua_reconstruct_extract_options(L, 2, NULL, &preserve_next, &last_proto);
+	lua_reconstruct_extract_options(L, 2, NULL, NULL, &preserve_next, &last_proto);
 
 	if (!lua_reconstruct_ip6hdr(L, 1,(struct ip6_hdr*)data, &len, last_proto, preserve_next))
 		luaL_error(L, "invalid data for ip6hdr");
@@ -2035,6 +2275,51 @@ static int luacall_reconstruct_udphdr(lua_State *L)
 	LUA_STACK_GUARD_RETURN(L,1)
 }
 
+bool lua_reconstruct_icmphdr(lua_State *L, int idx, struct icmp46 *icmp)
+{
+	if (lua_type(L,-1)!=LUA_TTABLE) return false;
+
+	LUA_STACK_GUARD_ENTER(L)
+
+	lua_getfield(L,idx,"icmp_type");
+	if (lua_type(L,-1)!=LUA_TNUMBER) goto err;
+	icmp->icmp_type = (uint8_t)lua_tointeger(L,-1);
+	lua_pop(L, 1);
+
+	lua_getfield(L,idx,"icmp_code");
+	if (lua_type(L,-1)!=LUA_TNUMBER) goto err;
+	icmp->icmp_code = (uint8_t)lua_tointeger(L,-1);
+	lua_pop(L, 1);
+
+	lua_getfield(L,idx,"icmp_data");
+	if (lua_type(L,-1)!=LUA_TNUMBER) goto err;
+	icmp->icmp_data32 = htonl((uint32_t)lua_tointeger(L,-1));
+	lua_pop(L, 1);
+
+	lua_getfield(L,idx,"icmp_cksum");
+	icmp->icmp_cksum = htons((uint16_t)lua_tointeger(L,-1));
+	lua_pop(L, 1);
+
+	LUA_STACK_GUARD_LEAVE(L, 0)
+	return true;
+err:
+	lua_pop(L, 1);
+	LUA_STACK_GUARD_LEAVE(L, 0)
+	return false;
+}
+static int luacall_reconstruct_icmphdr(lua_State *L)
+{
+	LUA_STACK_GUARD_ENTER(L)
+
+	lua_check_argc(L,"reconstruct_icmphdr",1);
+	struct icmp46 icmp;
+	if (!lua_reconstruct_icmphdr(L,1,&icmp))
+		luaL_error(L, "invalid data for icmphdr");
+	lua_pushlstring(L,(char*)&icmp,sizeof(icmp));
+
+	LUA_STACK_GUARD_RETURN(L,1)
+}
+
 uint8_t lua_ip6_l4proto_from_dissect(lua_State *L, int idx)
 {
 	int type;
@@ -2047,10 +2332,28 @@ uint8_t lua_ip6_l4proto_from_dissect(lua_State *L, int idx)
 	lua_getfield(L,idx,"udp");
 	type=lua_type(L,-1);
 	lua_pop(L,1);
-	return type==LUA_TTABLE ? IPPROTO_UDP : IPPROTO_NONE;
+	if (type==LUA_TTABLE) return IPPROTO_UDP;
+
+	lua_getfield(L,idx,"icmp");
+	type=lua_type(L,-1);
+	lua_pop(L,1);
+	if (type==LUA_TTABLE)
+	{
+		lua_getfield(L,idx,"ip");
+		type=lua_type(L,-1);
+		lua_pop(L,1);
+		if (type==LUA_TTABLE) return IPPROTO_ICMP;
+
+		lua_getfield(L,idx,"ip6");
+		type=lua_type(L,-1);
+		lua_pop(L,1);
+		if (type==LUA_TTABLE) return IPPROTO_ICMPV6;
+	}
+
+	return IPPROTO_NONE;
 }
 
-bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, bool badsum, bool ip6_preserve_next)
+bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, bool keepsum, bool badsum, bool ip6_preserve_next)
 {
 	uint8_t *data = buf;
 	size_t sz,l,lpayload,l3,left = *len;
@@ -2058,6 +2361,7 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 	struct ip6_hdr *ip6=NULL;
 	struct tcphdr *tcp=NULL;
 	struct udphdr *udp=NULL;
+	struct icmp46 *icmp=NULL;
 	const char *p;
 
 	LUA_STACK_GUARD_ENTER(L)
@@ -2093,9 +2397,10 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 	lua_pop(L, 1);
 
 	lua_getfield(L,idx,"tcp");
-	l = left;
+	l=0;
 	if (lua_type(L,-1)==LUA_TTABLE)
 	{
+		l = left;
 		tcp = (struct tcphdr*)data;
 		if (!lua_reconstruct_tcphdr(L, -1, tcp, &l))
 		{
@@ -2107,13 +2412,30 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 	{
 		lua_pop(L, 1);
 		lua_getfield(L,idx,"udp");
-		l = sizeof(struct udphdr);
-		if (lua_type(L,-1)!=LUA_TTABLE || left<l) goto err;
-		udp = (struct udphdr*)data;
-		if (!lua_reconstruct_udphdr(L, -1, udp))
+		if (lua_type(L,-1)==LUA_TTABLE)
 		{
-			DLOG_ERR("reconstruct_dissect: bad udp\n");
-			goto err;
+			l = sizeof(struct udphdr);
+			udp = (struct udphdr*)data;
+			if (!lua_reconstruct_udphdr(L, -1, udp))
+			{
+				DLOG_ERR("reconstruct_dissect: bad udp\n");
+				goto err;
+			}
+		}
+		else
+		{
+			lua_pop(L, 1);
+			lua_getfield(L,idx,"icmp");
+			if (lua_type(L,-1)==LUA_TTABLE)
+			{
+				l = sizeof(struct icmp46);
+				icmp = (struct icmp46*)data;
+				if (!lua_reconstruct_icmphdr(L, -1, icmp))
+				{
+					DLOG_ERR("reconstruct_dissect: bad icmp\n");
+					goto err;
+				}
+			}
 		}
 	}
 	data+=l; left-=l;
@@ -2137,22 +2459,31 @@ bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, b
 	lua_pop(L, 1);
 
 	l = data-buf;
-	if (udp)
+
+	if (!keepsum)
 	{
-		sz = (uint16_t)(lpayload+sizeof(struct udphdr));
-		if (sz>0xFFFF)
+		if (tcp)
 		{
-			DLOG_ERR("reconstruct_dissect: invalid payload length\n");
-			goto err;
+			tcp_fix_checksum(tcp,l-l3,ip,ip6);
+			if (badsum) tcp->th_sum ^= 1 + (random() % 0xFFFF);
 		}
-		udp->uh_ulen = htons((uint16_t)sz);
-		udp_fix_checksum(udp,l-l3,ip,ip6);
-		if (badsum) udp->uh_sum ^= 1 + (random() % 0xFFFF);
-	}
-	if (tcp)
-	{
-		tcp_fix_checksum(tcp,l-l3,ip,ip6);
-		if (badsum) tcp->th_sum ^= 1 + (random() % 0xFFFF);
+		else if (udp)
+		{
+			sz = (uint16_t)(lpayload+sizeof(struct udphdr));
+			if (sz>0xFFFF)
+			{
+				DLOG_ERR("reconstruct_dissect: invalid payload length\n");
+				goto err;
+			}
+			udp->uh_ulen = htons((uint16_t)sz);
+			udp_fix_checksum(udp,l-l3,ip,ip6);
+			if (badsum) udp->uh_sum ^= 1 + (random() % 0xFFFF);
+		}
+		else if (icmp)
+		{
+			icmp_fix_checksum(icmp,l-l3,ip6);
+			if (badsum) icmp->icmp_cksum ^= 1 + (random() % 0xFFFF);
+		}
 	}
 
 	if (ip)
@@ -2227,10 +2558,10 @@ static int luacall_reconstruct_dissect(lua_State *L)
 	uint8_t buf[RECONSTRUCT_MAX_SIZE] __attribute__((aligned(16)));
 	l = sizeof(buf);
 
-	bool ip6_preserve_next, badsum;
-	lua_reconstruct_extract_options(L, 2, &badsum, &ip6_preserve_next, NULL);
+	bool ip6_preserve_next, badsum, keepsum;
+	lua_reconstruct_extract_options(L, 2, &keepsum, &badsum, &ip6_preserve_next, NULL);
 
-	if (!lua_reconstruct_dissect(L, 1, buf, &l, badsum, ip6_preserve_next))
+	if (!lua_reconstruct_dissect(L, 1, buf, &l, keepsum, badsum, ip6_preserve_next))
 		luaL_error(L, "invalid dissect data");
 	lua_pushlstring(L,(char*)buf,l);
 
@@ -2245,10 +2576,10 @@ static int luacall_dissect(lua_State *L)
 	LUA_STACK_GUARD_ENTER(L)
 
 	size_t len;
-	const uint8_t *data = (const uint8_t*)luaL_checklstring(L, 1, &len);
+	const uint8_t *data = (const uint8_t*)lua_reqlstring(L, 1, &len);
 
 	struct dissect dis;
-	proto_dissect_l3l4(data, len, &dis);
+	proto_dissect_l3l4(data, len, &dis, false);
 
 	lua_push_dissect(L, &dis);
 
@@ -2263,7 +2594,7 @@ static int luacall_csum_ip4_fix(lua_State *L)
 	LUA_STACK_GUARD_ENTER(L)
 
 	size_t l;
-	const uint8_t *data = (const uint8_t*)luaL_checklstring(L, 1, &l);
+	const uint8_t *data = (const uint8_t*)lua_reqlstring(L, 1, &l);
 	if (l>60 || !proto_check_ipv4(data, l))
 		luaL_error(L, "invalid ip header");
 
@@ -2283,7 +2614,7 @@ static int luacall_csum_tcp_fix(lua_State *L)
 	LUA_STACK_GUARD_ENTER(L)
 
 	size_t l_ip;
-	const uint8_t *b_ip = (const uint8_t*)luaL_checklstring(L, 1, &l_ip);
+	const uint8_t *b_ip = (const uint8_t*)lua_reqlstring(L, 1, &l_ip);
 	const struct ip *ip=NULL;
 	const struct ip6_hdr *ip6=NULL;
 
@@ -2295,12 +2626,12 @@ static int luacall_csum_tcp_fix(lua_State *L)
 		luaL_error(L, "invalid ip header");
 
 	size_t l_tcp;
-	const uint8_t *b_tcp = (const uint8_t*)luaL_checklstring(L, 2, &l_tcp);
+	const uint8_t *b_tcp = (const uint8_t*)lua_reqlstring(L, 2, &l_tcp);
 	if (!proto_check_tcp(b_tcp, l_tcp))
 		luaL_error(L, "invalid tcp header");
 
 	size_t l_pl;
-	const uint8_t *b_pl = (const uint8_t*)luaL_checklstring(L, 3, &l_pl);
+	const uint8_t *b_pl = (const uint8_t*)lua_reqlstring(L, 3, &l_pl);
 	if (l_pl>0xFFFF)
 		luaL_error(L, "invalid payload length");
 
@@ -2326,7 +2657,7 @@ static int luacall_csum_udp_fix(lua_State *L)
 	LUA_STACK_GUARD_ENTER(L)
 
 	size_t l_ip;
-	const uint8_t *b_ip = (const uint8_t*)luaL_checklstring(L, 1, &l_ip);
+	const uint8_t *b_ip = (const uint8_t*)lua_reqlstring(L, 1, &l_ip);
 	const struct ip *ip=NULL;
 	const struct ip6_hdr *ip6=NULL;
 
@@ -2338,12 +2669,12 @@ static int luacall_csum_udp_fix(lua_State *L)
 		luaL_error(L, "invalid ip header");
 
 	size_t l_udp;
-	const uint8_t *b_udp = (const uint8_t*)luaL_checklstring(L, 2, &l_udp);
+	const uint8_t *b_udp = (const uint8_t*)lua_reqlstring(L, 2, &l_udp);
 	if (!proto_check_udp(b_udp, l_udp))
 		luaL_error(L, "invalid udp header");
 
 	size_t l_pl;
-	const uint8_t *b_pl = (const uint8_t*)luaL_checklstring(L, 3, &l_pl);
+	const uint8_t *b_pl = (const uint8_t*)lua_reqlstring(L, 3, &l_pl);
 	if (l_pl>0xFFFF)
 		luaL_error(L, "invalid payload length");
 
@@ -2361,6 +2692,49 @@ static int luacall_csum_udp_fix(lua_State *L)
 
 	LUA_STACK_GUARD_RETURN(L,1)
 }
+static int luacall_csum_icmp_fix(lua_State *L)
+{
+	// csum_icmp_fix(ip_header, icmp_header, payload) returns icmp_header
+	lua_check_argc(L,"csum_icmp_fix",3);
+
+	LUA_STACK_GUARD_ENTER(L)
+
+	size_t l_ip;
+	const uint8_t *b_ip = (const uint8_t*)lua_reqlstring(L, 1, &l_ip);
+	const struct ip *ip=NULL;
+	const struct ip6_hdr *ip6=NULL;
+
+	if (proto_check_ipv4(b_ip, l_ip))
+		ip = (struct ip*)b_ip;
+	else if (proto_check_ipv6(b_ip, l_ip))
+		ip6 = (struct ip6_hdr*)b_ip;
+	else
+		luaL_error(L, "invalid ip header");
+
+	size_t l_icmp;
+	const uint8_t *b_icmp = (const uint8_t*)lua_reqlstring(L, 2, &l_icmp);
+	if (!proto_check_icmp(b_icmp, l_icmp))
+		luaL_error(L, "invalid icmp header");
+
+	size_t l_pl;
+	const uint8_t *b_pl = (const uint8_t*)lua_reqlstring(L, 3, &l_pl);
+	if (l_pl>0xFFFF)
+		luaL_error(L, "invalid payload length");
+
+	size_t l_tpl = l_icmp + l_pl;
+	uint8_t *tpl = malloc(l_tpl);
+	if (!tpl) luaL_error(L, "out of memory");
+
+	memcpy(tpl, b_icmp, l_icmp);
+	memcpy(tpl+l_icmp, b_pl, l_pl);
+	struct icmp46 *icmp = (struct icmp46*)tpl;
+	icmp_fix_checksum(icmp, l_tpl, ip6);
+
+	lua_pushlstring(L,(char*)tpl,l_icmp);
+	free(tpl);
+
+	LUA_STACK_GUARD_RETURN(L,1)
+}
 
 static int luacall_ntop(lua_State *L)
 {
@@ -2373,7 +2747,7 @@ static int luacall_ntop(lua_State *L)
 
 	LUA_STACK_GUARD_ENTER(L)
 
-	p=luaL_checklstring(L,1,&l);
+	p=lua_reqlstring(L,1,&l);
 	switch(l)
 	{
 		case sizeof(struct in_addr):
@@ -2401,7 +2775,7 @@ static int luacall_pton(lua_State *L)
 
 	LUA_STACK_GUARD_ENTER(L)
 
-	p=luaL_checkstring(L,1);
+	p=lua_reqstring(L,1);
 	if (inet_pton(AF_INET,p,s))
 		lua_pushlstring(L,s,sizeof(struct in_addr));
 	else if (inet_pton(AF_INET6,p,s))
@@ -2462,7 +2836,7 @@ static int luacall_rawsend(lua_State *L)
 	sockaddr_in46 sa;
 	bool b;
 
-	data=(uint8_t*)luaL_checklstring(L,1,&len);
+	data=(uint8_t*)lua_reqlstring(L,1,&len);
 	lua_rawsend_extract_options(L,2,&repeats,&fwmark,&ifout);
 
 	if (!extract_dst(data, len, (struct sockaddr*)&sa))
@@ -2487,15 +2861,15 @@ static int luacall_rawsend_dissect(lua_State *L)
 	int repeats;
 	uint32_t fwmark;
 	sockaddr_in46 sa;
-	bool b, badsum, ip6_preserve_next;
+	bool b, badsum, keepsum, ip6_preserve_next;
 	uint8_t buf[RECONSTRUCT_MAX_SIZE] __attribute__((aligned(16)));
 	len = sizeof(buf);
 
 	luaL_checktype(L,1,LUA_TTABLE);
 	lua_rawsend_extract_options(L,2, &repeats, &fwmark, &ifout);
-	lua_reconstruct_extract_options(L, 3, &badsum, &ip6_preserve_next, NULL);
+	lua_reconstruct_extract_options(L, 3, &keepsum, &badsum, &ip6_preserve_next, NULL);
 
-	if (!lua_reconstruct_dissect(L, 1, buf, &len, badsum, ip6_preserve_next))
+	if (!lua_reconstruct_dissect(L, 1, buf, &len, keepsum, badsum, ip6_preserve_next))
 		luaL_error(L, "invalid dissect data");
 
 	if (!extract_dst(buf, len, (struct sockaddr*)&sa))
@@ -2507,6 +2881,211 @@ static int luacall_rawsend_dissect(lua_State *L)
 	LUA_STACK_GUARD_RETURN(L,1)
 }
 
+static int luacall_get_source_ip(lua_State *L)
+{
+	// get_source_ip(target_ip)
+	lua_check_argc(L,"get_source_ip",1);
+
+	LUA_STACK_GUARD_ENTER(L)
+
+	union
+	{
+		struct in_addr a4;
+		struct in6_addr a6;
+	} a;
+	size_t len;
+	const uint8_t *data = (uint8_t*)lua_reqlstring(L,1,&len);
+
+	switch(len)
+	{
+		case sizeof(struct in_addr) :
+			if (get_source_ip4((struct in_addr*)data, &a.a4))
+				lua_pushlstring(L,(char*)&a.a4,sizeof(a.a4));
+			else
+				lua_pushnil(L);
+			break;
+		case sizeof(struct in6_addr) :
+			if (get_source_ip6((struct in6_addr*)data, &a.a6))
+				lua_pushlstring(L,(char*)&a.a6,sizeof(a.a6));
+			else
+				lua_pushnil(L);
+			break;
+		default:
+			luaL_error(L, "invalid IP length %u", (unsigned int)len);
+	}
+
+	LUA_STACK_GUARD_RETURN(L,1)
+}
+
+#ifdef __CYGWIN__
+#define GAA_FLAGS (GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_ANYCAST)
+static int lua_get_ifaddrs(lua_State *L)
+{
+	LUA_STACK_GUARD_ENTER(L)
+
+	ULONG Size=0;
+	if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, NULL, NULL, &Size)==ERROR_BUFFER_OVERFLOW)
+	{
+		PIP_ADAPTER_ADDRESSES pip, pips = (PIP_ADAPTER_ADDRESSES)malloc(Size);
+		if (pips)
+		{
+			if (GetAdaptersAddresses(AF_UNSPEC, GAA_FLAGS, NULL, pips, &Size)==ERROR_SUCCESS)
+			{
+				lua_newtable(L);
+				for(pip=pips; pip ; pip=pip->Next)
+				{
+					if (!pip->FirstUnicastAddress || pip->OperStatus!=IfOperStatusUp) continue; // disconnected ?
+
+					char ifname[16];
+					snprintf(ifname,sizeof(ifname),"%u.0",pip->IfIndex);
+					lua_pushf_table(L,ifname);
+					lua_getfield(L,-1,ifname);
+
+					lua_pushf_str(L, "guid", pip->AdapterName);
+					if (pip->PhysicalAddressLength) lua_pushf_lstr(L, "phys",  pip->PhysicalAddress, pip->PhysicalAddressLength);
+					lua_pushf_int(L, "index", pip->IfIndex);
+					lua_pushf_int(L, "index6", pip->Ipv6IfIndex);
+					lua_pushf_int(L, "flags", pip->Flags);
+					lua_pushf_lint(L, "mtu", pip->Mtu);
+					lua_pushf_int(L, "iftype", pip->IfType);
+					lua_pushf_lint(L, "speed_xmit", pip->TransmitLinkSpeed);
+					lua_pushf_lint(L, "speed_recv", pip->ReceiveLinkSpeed);
+					lua_pushf_lint(L, "metric4", pip->Ipv4Metric);
+					lua_pushf_lint(L, "metric6", pip->Ipv6Metric);
+					lua_pushf_lint(L, "conntype", pip->ConnectionType);
+					lua_pushf_lint(L, "tunneltype", pip->TunnelType);
+					lua_pushf_table(L,"addr");
+					lua_getfield(L,-1,"addr");
+
+					int n;
+					uint32_t a4,a44;
+					PIP_ADAPTER_UNICAST_ADDRESS_LH pa;
+					for(pa=pip->FirstUnicastAddress, n=1; pa ; pa=pa->Next, n++)
+					{
+						lua_pushi_table(L, n);
+						lua_rawgeti(L, -1, n);
+						lua_pushf_ipaddr(L, "addr", pa->Address.lpSockaddr);
+						switch(pa->Address.lpSockaddr->sa_family)
+						{
+							case AF_INET:
+								if (pa->OnLinkPrefixLength<=32)
+								{
+									a44 = mask_from_bitcount(pa->OnLinkPrefixLength);
+									a4 = ~a44;
+									lua_pushf_lstr(L, "netmask", (const char*)&a4, 4);
+									a4 &= ((struct sockaddr_in*)pa->Address.lpSockaddr)->sin_addr.s_addr;
+									a4 |= a44;
+									lua_pushf_lstr(L, "broadcast", (const char*)&a4, 4);
+								}
+								break;
+							case AF_INET6:
+								if (pa->OnLinkPrefixLength<=128)
+								{
+									lua_pushf_lstr(L, "netmask", (const char*)mask_from_bitcount6(128 - pa->OnLinkPrefixLength), 16);
+								}
+								break;
+						}
+						lua_pushf_ipaddr(L, "addr", pa->Address.lpSockaddr);
+						lua_pop(L,1);
+					}
+					lua_pop(L,2);
+				}
+			}
+			free (pips);
+			goto ok;
+		}
+	}
+
+	lua_pushnil(L);
+
+ok:
+	LUA_STACK_GUARD_RETURN(L,1)
+}
+#else
+// in cygwin this does not work with low intergity level because of cygwin objects in NT directory tree
+static int lua_get_ifaddrs(lua_State *L)
+{
+	LUA_STACK_GUARD_ENTER(L)
+
+	struct ifaddrs *addrs,*a;
+	unsigned int index;
+	lua_Integer li;
+	struct ifreq ifr;
+	const char *ifname;
+#ifdef __CYGWIN__
+	char ifname_buf[16];
+#endif
+	memset(&ifr,0,sizeof(ifr));
+
+	if (getifaddrs(&addrs)<0)
+		lua_pushnil(L);
+	else
+	{
+		int sock = socket(AF_INET,SOCK_DGRAM,0);
+		lua_newtable(L);
+		a  = addrs;
+		for(a=addrs ; a ; a=a->ifa_next)
+		{
+			if (a->ifa_addr && (a->ifa_addr->sa_family==AF_INET || a->ifa_addr->sa_family==AF_INET6) && a->ifa_name && *a->ifa_name)
+			{
+#ifdef __CYGWIN__
+				// cygwin returns GUID interface names. windivert needs ifindex.subindex
+				if (index = if_nametoindex(a->ifa_name))
+				{
+					snprintf(ifname_buf,sizeof(ifname_buf),"%u.0",index);
+					ifname = ifname_buf;
+				}
+#else
+				ifname = a->ifa_name;
+#endif
+				lua_getfield(L,-1,ifname);
+				if (lua_isnil(L,-1))
+				{
+					lua_pop(L,1);
+					lua_pushf_table(L,ifname);
+					lua_getfield(L,-1,ifname);
+#ifdef __CYGWIN__
+					lua_pushf_str(L, "guid", a->ifa_name);
+#else
+					index = if_nametoindex(ifname);
+#endif
+					if (index) lua_pushf_int(L, "index", index);
+					lua_pushf_int(L, "flags", a->ifa_flags);
+#ifdef HAS_FILTER_SSID
+					lua_pushf_str(L, "ssid", wlan_ssid_search_ifname(ifname));
+#endif
+					strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+					if (sock>=0 && !ioctl(sock, SIOCGIFMTU, &ifr))
+						lua_pushf_int(L, "mtu", ifr.ifr_mtu);
+
+					lua_pushf_table(L,"addr");
+				}
+				lua_getfield(L,-1,"addr");
+				li = lua_rawlen(L,-1)+1;
+				lua_pushi_table(L, li);
+				lua_rawgeti(L,-1,li);
+				lua_pushf_ipaddr(L, "addr", a->ifa_addr);
+				lua_pushf_ipaddr(L, "netmask", a->ifa_netmask);
+				lua_pushf_ipaddr(L, "broadcast", a->ifa_broadaddr);
+				lua_pushf_ipaddr(L, "dst", a->ifa_dstaddr);
+				lua_pop(L,3);
+			}
+		}
+		freeifaddrs(addrs);
+		if (sock>=0) close(sock);
+	}
+
+	LUA_STACK_GUARD_RETURN(L,1)
+}
+#endif // CYGWIN
+
+static int luacall_get_ifaddrs(lua_State *L)
+{
+	lua_check_argc(L,"get_ifaddrs",0);
+	lua_get_ifaddrs(L);
+	return 1;
+}
+
 static int luacall_resolve_pos(lua_State *L)
 {
 	// resolve_pos(blob,l7payload_type,marker[,zero_based_pos])
@@ -2516,9 +3095,9 @@ static int luacall_resolve_pos(lua_State *L)
 
 	int argc=lua_gettop(L);
 	size_t len;
-	const uint8_t *data = (uint8_t*)luaL_checklstring(L,1,&len);
-	const char *sl7payload = luaL_checkstring(L,2);
-	const char *smarker = luaL_checkstring(L,3);
+	const uint8_t *data = (uint8_t*)lua_reqlstring(L,1,&len);
+	const char *sl7payload = lua_reqstring(L,2);
+	const char *smarker = lua_reqstring(L,3);
 	bool bZeroBased = argc>=4 && lua_toboolean(L,4);
 
 	t_l7payload l7payload = l7payload_from_name(sl7payload);
@@ -2546,9 +3125,9 @@ static int luacall_resolve_multi_pos(lua_State *L)
 
 	int argc=lua_gettop(L);
 	size_t len;
-	const uint8_t *data = (uint8_t*)luaL_checklstring(L,1,&len);
-	const char *sl7payload = luaL_checkstring(L,2);
-	const char *smarkers = luaL_checkstring(L,3);
+	const uint8_t *data = (uint8_t*)lua_reqlstring(L,1,&len);
+	const char *sl7payload = lua_reqstring(L,2);
+	const char *smarkers = lua_reqstring(L,3);
 	bool bZeroBased = argc>=4 && lua_toboolean(L,4);
 
 	t_l7payload l7payload = l7payload_from_name(sl7payload);
@@ -2577,9 +3156,9 @@ static int luacall_resolve_range(lua_State *L)
 
 	int argc=lua_gettop(L);
 	size_t i,len;
-	const uint8_t *data = (uint8_t*)luaL_checklstring(L,1,&len);
-	const char *sl7payload = luaL_checkstring(L,2);
-	const char *smarkers = luaL_checkstring(L,3);
+	const uint8_t *data = (uint8_t*)lua_reqlstring(L,1,&len);
+	const char *sl7payload = lua_reqstring(L,2);
+	const char *smarkers = lua_reqstring(L,3);
 	bool bStrict = argc>=4 && lua_toboolean(L,4);
 	bool bZeroBased = argc>=5 && lua_toboolean(L,5);
 
@@ -2627,13 +3206,13 @@ static int luacall_tls_mod(lua_State *L)
 
 	size_t fake_tls_len;
 	bool bRes;
-	const uint8_t *fake_tls = (uint8_t*)luaL_checklstring(L,1,&fake_tls_len);
-	const char *modlist = luaL_checkstring(L,2);
+	const uint8_t *fake_tls = (uint8_t*)lua_reqlstring(L,1,&fake_tls_len);
+	const char *modlist = lua_reqstring(L,2);
 
 	size_t payload_len = 0;
 	const uint8_t *payload = NULL;
 	if (argc>=3 && lua_type(L,3)!=LUA_TNIL)
-		payload = (uint8_t*)luaL_checklstring(L,3,&payload_len);
+		payload = (uint8_t*)lua_reqlstring(L,3,&payload_len);
 
 	struct fake_tls_mod mod;
 	if (!TLSMod_parse_list(modlist, &mod))
@@ -3248,6 +3827,7 @@ static void lua_init_const(void)
 		{"IP6_BASE_LEN",sizeof(struct ip6_hdr)},
 		{"TCP_BASE_LEN",sizeof(struct tcphdr)},
 		{"UDP_BASE_LEN",sizeof(struct udphdr)},
+		{"ICMP_BASE_LEN",sizeof(struct icmp46)},
 
 		{"TCP_KIND_END",TCP_KIND_END},
 		{"TCP_KIND_NOOP",TCP_KIND_NOOP},
@@ -3300,7 +3880,62 @@ static void lua_init_const(void)
 		{"IPPROTO_MH",IPPROTO_MH},
 		{"IPPROTO_HIP",IPPROTO_HIP},
 		{"IPPROTO_SHIM6",IPPROTO_SHIM6},
-		{"IPPROTO_NONE",IPPROTO_NONE}
+		{"IPPROTO_NONE",IPPROTO_NONE},
+
+		// icmp types
+		{"ICMP_ECHOREPLY",ICMP_ECHOREPLY},
+		{"ICMP_DEST_UNREACH",ICMP_DEST_UNREACH},
+		{"ICMP_REDIRECT",ICMP_REDIRECT},
+		{"ICMP_ECHO",ICMP_ECHO},
+		{"ICMP_TIME_EXCEEDED",ICMP_TIME_EXCEEDED},
+		{"ICMP_PARAMETERPROB",ICMP_PARAMETERPROB},
+		{"ICMP_TIMESTAMP",ICMP_TIMESTAMP},
+		{"ICMP_TIMESTAMPREPLY",ICMP_TIMESTAMPREPLY},
+		{"ICMP_INFO_REQUEST",ICMP_INFO_REQUEST},
+		{"ICMP_INFO_REPLY",ICMP_INFO_REPLY},
+
+		// icmp codes for UNREACH
+		{"ICMP_UNREACH_NET",ICMP_UNREACH_NET},
+		{"ICMP_UNREACH_HOST",ICMP_UNREACH_HOST},
+		{"ICMP_UNREACH_PROTOCOL",ICMP_UNREACH_PROTOCOL},
+		{"ICMP_UNREACH_PORT",ICMP_UNREACH_PORT},
+		{"ICMP_UNREACH_NEEDFRAG",ICMP_UNREACH_NEEDFRAG},
+		{"ICMP_UNREACH_SRCFAIL",ICMP_UNREACH_SRCFAIL},
+		{"ICMP_UNREACH_NET_UNKNOWN",ICMP_UNREACH_NET_UNKNOWN},
+		{"ICMP_UNREACH_HOST_UNKNOWN",ICMP_UNREACH_HOST_UNKNOWN},
+		{"ICMP_UNREACH_NET_PROHIB",ICMP_UNREACH_NET_PROHIB},
+		{"ICMP_UNREACH_HOST_PROHIB",ICMP_UNREACH_HOST_PROHIB},
+		{"ICMP_UNREACH_TOSNET",ICMP_UNREACH_TOSNET},
+		{"ICMP_UNREACH_TOSHOST",ICMP_UNREACH_TOSHOST},
+		{"ICMP_UNREACH_FILTER_PROHIB",ICMP_UNREACH_FILTER_PROHIB},
+		{"ICMP_UNREACH_HOST_PRECEDENCE",ICMP_UNREACH_HOST_PRECEDENCE},
+		{"ICMP_UNREACH_PRECEDENCE_CUTOFF",ICMP_UNREACH_PRECEDENCE_CUTOFF},
+
+		// icmp codes for REDIRECT
+		{"ICMP_REDIRECT_NET",ICMP_REDIRECT_NET},
+		{"ICMP_REDIRECT_HOST",ICMP_REDIRECT_HOST},
+		{"ICMP_REDIRECT_TOSNET",ICMP_REDIRECT_TOSNET},
+		{"ICMP_REDIRECT_TOSHOST",ICMP_REDIRECT_TOSHOST},
+
+		// icmp codes for TIME_EXCEEDED
+		{"ICMP_TIMXCEED_INTRANS",ICMP_TIMXCEED_INTRANS},
+		{"ICMP_TIMXCEED_REASS",ICMP_TIMXCEED_REASS},
+
+		// icmp6 types
+		{"ICMP6_ECHO_REQUEST",ICMP6_ECHO_REQUEST},
+		{"ICMP6_ECHO_REPLY",ICMP6_ECHO_REPLY},
+		{"ICMP6_DST_UNREACH",ICMP6_DST_UNREACH},
+		{"ICMP6_PACKET_TOO_BIG",ICMP6_PACKET_TOO_BIG},
+		{"ICMP6_TIME_EXCEEDED",ICMP6_TIME_EXCEEDED},
+		{"ICMP6_PARAM_PROB",ICMP6_PARAM_PROB},
+		{"MLD_LISTENER_QUERY",MLD_LISTENER_QUERY},
+		{"MLD_LISTENER_REPORT",MLD_LISTENER_REPORT},
+		{"MLD_LISTENER_REDUCTION",MLD_LISTENER_REDUCTION},
+		{"ND_ROUTER_SOLICIT",ND_ROUTER_SOLICIT},
+		{"ND_ROUTER_ADVERT",ND_ROUTER_ADVERT},
+		{"ND_NEIGHBOR_SOLICIT",ND_NEIGHBOR_SOLICIT},
+		{"ND_NEIGHBOR_ADVERT",ND_NEIGHBOR_ADVERT},
+		{"ND_REDIRECT",ND_REDIRECT}
 	};
 	DLOG("\nLUA NUMERIC:");
 	for (int i=0;i<sizeof(cuint)/sizeof(*cuint);i++)
@@ -3406,6 +4041,9 @@ static void lua_init_functions(void)
 
 		// crypto
 		{"bcryptorandom",luacall_bcryptorandom},
+		{"bxor",luacall_bxor},
+		{"bor",luacall_bor},
+		{"band",luacall_band},
 		{"hash",luacall_hash},
 		{"aes",luacall_aes},
 		{"aes_gcm",luacall_aes_gcm},
@@ -3435,17 +4073,29 @@ static void lua_init_functions(void)
 		// convert table representation to blob or vise versa
 		{"reconstruct_tcphdr",luacall_reconstruct_tcphdr},
 		{"reconstruct_udphdr",luacall_reconstruct_udphdr},
+		{"reconstruct_icmphdr",luacall_reconstruct_icmphdr},
 		{"reconstruct_ip6hdr",luacall_reconstruct_ip6hdr},
 		{"reconstruct_iphdr",luacall_reconstruct_iphdr},
 		{"reconstruct_dissect",luacall_reconstruct_dissect},
+		{"dissect_tcphdr",luacall_dissect_tcphdr},
+		{"dissect_udphdr",luacall_dissect_udphdr},
+		{"dissect_icmphdr",luacall_dissect_icmphdr},
+		{"dissect_ip6hdr",luacall_dissect_ip6hdr},
+		{"dissect_iphdr",luacall_dissect_iphdr},
 		{"dissect",luacall_dissect},
 		{"csum_ip4_fix",luacall_csum_ip4_fix},
 		{"csum_tcp_fix",luacall_csum_tcp_fix},
 		{"csum_udp_fix",luacall_csum_udp_fix},
+		{"csum_icmp_fix",luacall_csum_icmp_fix},
 
 		// send packets
 		{"rawsend",luacall_rawsend},
 		{"rawsend_dissect",luacall_rawsend_dissect},
+
+		// get source addr when connecting to specified target addr
+		{"get_source_ip",luacall_get_source_ip},
+		// get os interface intformation
+		{"get_ifaddrs",luacall_get_ifaddrs},
 
 		// resolve position markers in any supported payload
 		{"resolve_pos",luacall_resolve_pos},
@@ -3475,6 +4125,17 @@ static void lua_init_mt()
 	lua_mt_init_zstream(params.L);
 	lua_mt_init_desync_ctx(params.L);
 	lua_desync_ctx_create(params.L);
+}
+
+static void lua_interrupt_hook(lua_State *L, lua_Debug *ar)
+{
+	// avoid infinite loops
+	lua_sethook(L, NULL, 0, 0); 
+	luaL_error(L, "INTERRUPT"); 
+}
+void lua_req_quit(void)
+{
+	if (params.L) lua_sethook(params.L, lua_interrupt_hook, LUA_MASKCALL | LUA_MASKRET | LUA_MASKCOUNT | LUA_MASKLINE, 1);
 }
 
 bool lua_init(void)

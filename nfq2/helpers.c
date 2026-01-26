@@ -448,107 +448,6 @@ bool file_open_test(const char *filename, int flags)
 	return false;
 }
 
-bool pf_in_range(uint16_t port, const port_filter *pf)
-{
-	return port && (((!pf->from && !pf->to) || (port>=pf->from && port<=pf->to)) ^ pf->neg);
-}
-bool pf_parse(const char *s, port_filter *pf)
-{
-	unsigned int v1,v2;
-	char c;
-
-	if (!s) return false;
-	if (*s=='*' && s[1]==0)
-	{
-		pf->from=1; pf->to=0xFFFF;
-		return true;
-	}
-	if (*s=='~')
-	{
-		pf->neg=true;
-		s++;
-	}
-	else
-		pf->neg=false;
-	if (sscanf(s,"%u-%u%c",&v1,&v2,&c)==2)
-	{
-		if (v1>65535 || v2>65535 || v1>v2) return false;
-		pf->from=(uint16_t)v1;
-		pf->to=(uint16_t)v2;
-	}
-	else if (sscanf(s,"%u%c",&v1,&c)==1)
-	{
-		if (v1>65535) return false;
-		pf->to=pf->from=(uint16_t)v1;
-	}
-	else
-		return false;
-	// deny all case
-	if (!pf->from && !pf->to) pf->neg=true;
-	return true;
-}
-bool pf_is_empty(const port_filter *pf)
-{
-	return !pf->neg && !pf->from && !pf->to;
-}
-
-bool packet_pos_parse(const char *s, struct packet_pos *pos)
-{
-	if (*s!='n' && *s!='d' && *s!='s' && *s!='p' && *s!='b' && *s!='x' && *s!='a') return false;
-	pos->mode=*s;
-	if (pos->mode=='x' || pos->mode=='a')
-	{
-		pos->pos=0;
-		return true;
-	}
-	return sscanf(s+1,"%u",&pos->pos)==1;
-}
-bool packet_range_parse(const char *s, struct packet_range *range)
-{
-	const char *p;
-
-	range->upper_cutoff = false;
-	if (*s=='-' || *s=='<')
-	{
-		range->from = PACKET_POS_ALWAYS;
-		range->upper_cutoff = *s=='<';
-	}
-	else
-	{
-		if (!packet_pos_parse(s,&range->from)) return false;
-		if (range->from.mode=='x')
-		{
-			range->to = range->from;
-			return true;
-		}
-		if (!(p = strchr(s,'-')))
-			p = strchr(s,'<');
-		if (p)
-		{
-			s = p;
-			range->upper_cutoff = *s=='<';
-		}
-		else
-		{
-			if (range->from.mode=='a')
-			{
-				range->to = range->from;
-				return true;
-			}
-			return false;
-		}
-	}
-	s++;
-	if (*s)
-	{
-		return packet_pos_parse(s,&range->to);
-	}
-	else
-	{
-		range->to = PACKET_POS_ALWAYS;
-		return true;
-	}
-}
 
 void fill_random_bytes(uint8_t *p,size_t sz)
 {
@@ -581,11 +480,54 @@ bool fill_crypto_random_bytes(uint8_t *p,size_t sz)
 	return b;
 }
 
+#if defined(__GNUC__) && !defined(__llvm__)
+__attribute__((optimize ("no-strict-aliasing")))
+#endif
+void bxor(const uint8_t *x1, const uint8_t *x2, uint8_t *result, size_t sz)
+{
+	for (; sz>=8 ; x1+=8, x2+=8, result+=8, sz-=8)
+		*(uint64_t*)result = *(uint64_t*)x1 ^ *(uint64_t*)x2;
+	for (; sz ; x1++, x2++, result++, sz--)
+		*result = *x1 ^ *x2;
+}
+#if defined(__GNUC__) && !defined(__llvm__)
+__attribute__((optimize ("no-strict-aliasing")))
+#endif
+void bor(const uint8_t *x1, const uint8_t *x2, uint8_t *result, size_t sz)
+{
+	for (; sz>=8 ; x1+=8, x2+=8, result+=8, sz-=8)
+		*(uint64_t*)result = *(uint64_t*)x1 | *(uint64_t*)x2;
+	for (; sz ; x1++, x2++, result++, sz--)
+		*result = *x1 | *x2;
+}
+#if defined(__GNUC__) && !defined(__llvm__)
+__attribute__((optimize ("no-strict-aliasing")))
+#endif
+void band(const uint8_t *x1, const uint8_t *x2, uint8_t *result, size_t sz)
+{
+	for (; sz>=8 ; x1+=8, x2+=8, result+=8, sz-=8)
+		*(uint64_t*)result = *(uint64_t*)x1 & *(uint64_t*)x2;
+	for (; sz ; x1++, x2++, result++, sz--)
+		*result = *x1 & *x2;
+}
+
+
 
 void set_console_io_buffering(void)
 {
 	setvbuf(stdout, NULL, _IOLBF, 0);
 	setvbuf(stderr, NULL, _IOLBF, 0);
+}
+void close_std(void)
+{
+	// free memory allocated by setvbuf
+	fclose(stdout);
+	fclose(stderr);
+}
+void close_std_and_exit(int code)
+{
+	close_std();
+	exit(code);
 }
 
 bool set_env_exedir(const char *argv0)
@@ -601,73 +543,6 @@ bool set_env_exedir(const char *argv0)
 	return bOK;
 }
 
-
-
-void str_cidr4(char *s, size_t s_len, const struct cidr4 *cidr)
-{
-	char s_ip[16];
-	*s_ip=0;
-	inet_ntop(AF_INET, &cidr->addr, s_ip, sizeof(s_ip));
-	snprintf(s,s_len,cidr->preflen<32 ? "%s/%u" : "%s", s_ip, cidr->preflen);
-}
-void print_cidr4(const struct cidr4 *cidr)
-{
-	char s[19];
-	str_cidr4(s,sizeof(s),cidr);
-	printf("%s",s);
-}
-void str_cidr6(char *s, size_t s_len, const struct cidr6 *cidr)
-{
-	char s_ip[40];
-	*s_ip=0;
-	inet_ntop(AF_INET6, &cidr->addr, s_ip, sizeof(s_ip));
-	snprintf(s,s_len,cidr->preflen<128 ? "%s/%u" : "%s", s_ip, cidr->preflen);
-}
-void print_cidr6(const struct cidr6 *cidr)
-{
-	char s[44];
-	str_cidr6(s,sizeof(s),cidr);
-	printf("%s",s);
-}
-bool parse_cidr4(char *s, struct cidr4 *cidr)
-{
-	char *p,d;
-	bool b;
-	unsigned int plen;
-
-	if ((p = strchr(s, '/')))
-	{
-		if (sscanf(p + 1, "%u", &plen)!=1 || plen>32)
-			return false;
-		cidr->preflen = (uint8_t)plen;
-		d=*p; *p=0; // backup char
-	}
-	else
-		cidr->preflen = 32;
-	b = (inet_pton(AF_INET, s, &cidr->addr)==1);
-	if (p) *p=d; // restore char
-	return b;
-}
-bool parse_cidr6(char *s, struct cidr6 *cidr)
-{
-	char *p,d;
-	bool b;
-	unsigned int plen;
-
-	if ((p = strchr(s, '/')))
-	{
-		if (sscanf(p + 1, "%u", &plen)!=1 || plen>128)
-			return false;
-		cidr->preflen = (uint8_t)plen;
-		d=*p; *p=0; // backup char
-	}
-	else
-		cidr->preflen = 128;
-	b = (inet_pton(AF_INET6, s, &cidr->addr)==1);
-	if (p) *p=d; // restore char
-	return b;
-}
-
 bool parse_int16(const char *p, int16_t *v)
 {
 	if (*p == '+' || *p == '-' || *p >= '0' && *p <= '9')
@@ -677,4 +552,30 @@ bool parse_int16(const char *p, int16_t *v)
 		return *v == i; // check overflow
 	}
 	return false;
+}
+
+uint32_t mask_from_bitcount(uint32_t zct)
+{
+	return zct<32 ? ~((1u << zct) - 1) : 0;
+}
+static void mask_from_bitcount6_make(uint32_t zct, struct in6_addr *a)
+{
+	if (zct >= 128)
+		memset(a->s6_addr,0x00,16);
+	else
+	{
+		int32_t n = (127 - zct) >> 3;
+		memset(a->s6_addr,0xFF,n);
+		memset(a->s6_addr+n,0x00,16-n);
+		a->s6_addr[n] = ~((1u << (zct & 7)) - 1);
+	}
+}
+static struct in6_addr ip6_mask[129];
+void mask_from_bitcount6_prepare(void)
+{
+	for (int zct=0;zct<=128;zct++) mask_from_bitcount6_make(zct, ip6_mask+zct);
+}
+const struct in6_addr *mask_from_bitcount6(uint32_t zct)
+{
+	return ip6_mask+zct;
 }

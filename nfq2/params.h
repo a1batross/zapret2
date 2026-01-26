@@ -63,6 +63,8 @@ struct desync_profile
 
 	bool filter_ipv4,filter_ipv6;
 	struct port_filters_head pf_tcp,pf_udp;
+	struct icmp_filters_head icf;
+	struct ipp_filters_head ipf;
 	uint64_t filter_l7;	// L7_PROTO_* bits
 
 #ifdef HAS_FILTER_SSID
@@ -125,7 +127,7 @@ struct params_s
 	char debug_logfile[PATH_MAX];
 	bool debug;
 
-	bool daemon;
+	bool daemon, intercept;
 
 #ifdef __linux__
 	int qnum;
@@ -144,6 +146,7 @@ struct params_s
 	char *windivert_filter;
 	char *wf_pf_tcp_src_in, *wf_pf_tcp_dst_in, *wf_pf_udp_src_in, *wf_pf_udp_dst_in;
 	char *wf_pf_tcp_src_out, *wf_pf_tcp_dst_out, *wf_pf_udp_src_out, *wf_pf_udp_dst_out;
+	char *wf_icf_in, *wf_icf_out, *wf_ipf_in, *wf_ipf_out;
 #else
 	bool droproot;
 	char *user;
@@ -194,6 +197,7 @@ void init_params(struct params_s *params);
 void cleanup_args(struct params_s *params);
 #endif
 #ifdef __CYGWIN__
+bool alloc_windivert_portfilters(struct params_s *params);
 void cleanup_windivert_portfilters(struct params_s *params);
 #endif
 void cleanup_params(struct params_s *params);

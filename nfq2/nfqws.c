@@ -52,7 +52,7 @@
 
 struct params_s params;
 static volatile sig_atomic_t bReload = false;
-bool bQuit = false;
+volatile sig_atomic_t bQuit = false;
 
 static void onhup(int sig)
 {
@@ -109,21 +109,21 @@ static void onusr2(int sig)
 static void onint(int sig)
 {
 	if (bQuit) return;
-
 	const char *msg = "INT received !\n";
 	size_t wr = write(1, msg, strlen(msg));
 	bQuit = true;
+	lua_req_quit();
 }
 static void onterm(int sig)
 {
 	if (bQuit) return;
-
 	const char *msg = "TERM received !\n";
 	size_t wr = write(1, msg, strlen(msg));
 	bQuit = true;
+	lua_req_quit();
 }
 
-static void pre_desync(void)
+static void catch_signals(void)
 {
 	struct sigaction sa;
 
@@ -176,6 +176,26 @@ static bool test_list_files()
 			DLOG_ERR("cannot access ipset file '%s'\n", ifile->filename);
 			return false;
 		}
+	return true;
+}
+
+
+// writes and closes pidfile
+static int write_pidfile(FILE **Fpid)
+{
+	if (*Fpid)
+	{
+		int r = fprintf(*Fpid, "%d", getpid());
+		if (r <= 0)
+		{
+			DLOG_PERROR("write pidfile");
+			fclose(*Fpid);
+			*Fpid = NULL;
+			return false;
+		}
+		fclose(*Fpid);
+		*Fpid = NULL;
+	}
 	return true;
 }
 
@@ -343,8 +363,23 @@ static int nfq_main(void)
 	if (!rawsend_preinit(params.bind_fix4, params.bind_fix6))
 		goto err;
 
+	if (!params.intercept)
+	{
+		if (params.daemon) daemonize();
+		if (!write_pidfile(&Fpid)) goto err;
+		notify_ready();
+	}
+
+	catch_signals();
+
 	if (!lua_init())
 		goto err;
+
+	if (!params.intercept)
+	{
+		DLOG("no intercept quit\n");
+		goto exok;
+	}
 
 	if (!nfq_init(&h, &qh))
 		goto err;
@@ -362,19 +397,8 @@ static int nfq_main(void)
 #endif
 
 	if (params.daemon) daemonize();
+	if (!write_pidfile(&Fpid)) goto err;
 
-	if (Fpid)
-	{
-		if (fprintf(Fpid, "%d", getpid()) <= 0)
-		{
-			DLOG_PERROR("write pidfile");
-			goto err;
-		}
-		fclose(Fpid);
-		Fpid = NULL;
-	}
-
-	pre_desync();
 	notify_ready();
 
 	fd = nfq_fd(h);
@@ -451,49 +475,50 @@ static int dvt_main(void)
 		return 1;
 	}
 
-	bp4.sin_family = AF_INET;
-	bp4.sin_port = htons(params.port);
-	bp4.sin_addr.s_addr = INADDR_ANY;
-	DLOG_CONDUP("creating divert4 socket\n");
-	fd[0] = socket_divert(AF_INET);
-	if (fd[0] == -1) {
-		DLOG_PERROR("socket (DIVERT4)");
-		goto exiterr;
-	}
-	DLOG_CONDUP("binding divert4 socket\n");
-	if (bind(fd[0], (struct sockaddr*)&bp4, sizeof(bp4)) < 0)
+	if (params.intercept)
 	{
-		DLOG_PERROR("bind (DIVERT4)");
-		goto exiterr;
-	}
-
+		bp4.sin_family = AF_INET;
+		bp4.sin_port = htons(params.port);
+		bp4.sin_addr.s_addr = INADDR_ANY;
+		DLOG_CONDUP("creating divert4 socket\n");
+		fd[0] = socket_divert(AF_INET);
+		if (fd[0] == -1) {
+			DLOG_PERROR("socket (DIVERT4)");
+			goto exiterr;
+		}
+		DLOG_CONDUP("binding divert4 socket\n");
+		if (bind(fd[0], (struct sockaddr*)&bp4, sizeof(bp4)) < 0)
+		{
+			DLOG_PERROR("bind (DIVERT4)");
+			goto exiterr;
+		}
 
 #ifdef __OpenBSD__
-	// in OpenBSD must use separate divert sockets for ipv4 and ipv6
-	memset(&bp6, 0, sizeof(bp6));
-	bp6.sin6_family = AF_INET6;
-	bp6.sin6_port = htons(params.port);
-
-	DLOG_CONDUP("creating divert6 socket\n");
-	fd[1] = socket_divert(AF_INET6);
-	if (fd[1] == -1) {
-		DLOG_PERROR("socket (DIVERT6)");
-		goto exiterr;
-	}
-	DLOG_CONDUP("binding divert6 socket\n");
-	if (bind(fd[1], (struct sockaddr*)&bp6, sizeof(bp6)) < 0)
-	{
-		DLOG_PERROR("bind (DIVERT6)");
-		goto exiterr;
-	}
-	fdct++;
+		// in OpenBSD must use separate divert sockets for ipv4 and ipv6
+		memset(&bp6, 0, sizeof(bp6));
+		bp6.sin6_family = AF_INET6;
+		bp6.sin6_port = htons(params.port);
+	
+		DLOG_CONDUP("creating divert6 socket\n");
+		fd[1] = socket_divert(AF_INET6);
+		if (fd[1] == -1) {
+			DLOG_PERROR("socket (DIVERT6)");
+			goto exiterr;
+		}
+		DLOG_CONDUP("binding divert6 socket\n");
+		if (bind(fd[1], (struct sockaddr*)&bp6, sizeof(bp6)) < 0)
+		{
+			DLOG_PERROR("bind (DIVERT6)");
+			goto exiterr;
+		}
+		fdct++;
 #endif
-	fdmax = (fd[0] > fd[1] ? fd[0] : fd[1]) + 1;
+		fdmax = (fd[0] > fd[1] ? fd[0] : fd[1]) + 1;
+	}
 
 	DLOG_CONDUP("initializing raw sockets\n");
 	if (!rawsend_preinit(false, false))
 		goto exiterr;
-
 
 	if (params.droproot && !droproot(params.uid, params.user, params.gid, params.gid_count))
 		goto exiterr;
@@ -503,23 +528,25 @@ static int dvt_main(void)
 	if (!lua_test_init_script_files())
 		goto exiterr;
 
+	catch_signals();
+
+	if (!params.intercept)
+	{
+		if (params.daemon) daemonize();
+		if (!write_pidfile(&Fpid)) goto exiterr;
+	}
+
 	if (!lua_init())
 		goto exiterr;
 
-	if (params.daemon) daemonize();
-
-	if (Fpid)
+	if (!params.intercept)
 	{
-		if (fprintf(Fpid, "%d", getpid()) <= 0)
-		{
-			DLOG_PERROR("write pidfile");
-			goto exiterr;
-		}
-		fclose(Fpid);
-		Fpid = NULL;
+		DLOG("no intercept quit\n");
+		goto exitok;
 	}
 
-	pre_desync();
+	if (params.daemon) daemonize();
+	if (!write_pidfile(&Fpid)) goto exiterr;
 
 	for (;;)
 	{
@@ -637,6 +664,7 @@ static int win_main()
 	int res=0;
 	uint8_t packet[RECONSTRUCT_MAX_SIZE] __attribute__((aligned(16)));
 
+	// windows emulated fork logic does not cover objects outside of cygwin world. have to daemonize before inits
 	if (params.daemon) daemonize();
 
 	if (*params.pidfile && !writepid(params.pidfile))
@@ -651,7 +679,7 @@ static int win_main()
 		res=w_win32_error; goto ex;
 	}
 
-	pre_desync();
+	catch_signals();
 
 	for (;;)
 	{
@@ -675,6 +703,8 @@ static int win_main()
 			res=w_win32_error; goto ex;
 		}
 
+		DLOG_CONDUP(params.intercept ? "windivert initialized. capture is started.\n" : "windivert initialized\n");
+
 		if (!win_sandbox())
 		{
 			res=w_win32_error;
@@ -688,7 +718,11 @@ static int win_main()
 			res=ERROR_INVALID_PARAMETER; goto ex;
 		}
 
-		DLOG_CONDUP("windivert initialized. capture is started.\n");
+		if (!params.intercept)
+		{
+			DLOG("no intercept quit\n");
+			goto ex;
+		}
 
 		for (id = 0;; id++)
 		{
@@ -765,8 +799,7 @@ ex:
 static void exit_clean(int code)
 {
 	cleanup_params(&params);
-
-	exit(code);
+	close_std_and_exit(code);
 }
 
 
@@ -1042,6 +1075,52 @@ static bool parse_pf_list(char *opt, struct port_filters_head *pfl)
 	return true;
 }
 
+static bool parse_icf_list(char *opt, struct icmp_filters_head *icfl)
+{
+	char *e, *p, c;
+	icmp_filter icf;
+	bool b;
+
+	for (p = opt; p; )
+	{
+		if ((e = strchr(p, ',')))
+		{
+			c = *e;
+			*e = 0;
+		}
+
+		b = icf_parse(p, &icf) && icmp_filter_add(icfl, &icf);
+		if (e) *e++ = c;
+		if (!b) return false;
+
+		p = e;
+	}
+	return true;
+}
+
+static bool parse_ipp_list(char *opt, struct ipp_filters_head *ippl)
+{
+	char *e, *p, c;
+	ipp_filter ipp;
+	bool b;
+
+	for (p = opt; p; )
+	{
+		if ((e = strchr(p, ',')))
+		{
+			c = *e;
+			*e = 0;
+		}
+
+		b = ipp_parse(p, &ipp) && ipp_filter_add(ippl, &ipp);
+		if (e) *e++ = c;
+		if (!b) return false;
+
+		p = e;
+	}
+	return true;
+}
+
 bool lua_call_param_add(char *opt, struct str2_list_head *args)
 {
 	char c,*p;
@@ -1260,6 +1339,82 @@ static bool wf_make_pf(char *opt, const char *l4, const char *portname, char *bu
 	strncat(buf, ")", len - strlen(buf) - 1);
 	return true;
 }
+static bool wf_make_icf(char *opt, char *buf, size_t len)
+{
+	char *e, *p, c, s1[80];
+	icmp_filter icf;
+
+	if (len < 3) return false;
+
+	for (p = opt, *buf = '(', buf[1] = 0; p;)
+	{
+		if ((e = strchr(p, ',')))
+		{
+			c = *e;
+			*e = 0;
+		}
+		if (!icf_parse(p, &icf)) return false;
+		switch(icf.mode)
+		{
+			case FLTMODE_FILTER:
+				if (icf.code_valid)
+					snprintf(s1, sizeof(s1), "icmp.Type==%u and icmp.Code==%u or icmpv6.Type==%u and icmpv6.Code==%u", icf.type, icf.code, icf.type, icf.code);
+				else
+					snprintf(s1, sizeof(s1), "icmp.Type==%u or icmpv6.Type==%u", icf.type, icf.type);
+				break;
+			case FLTMODE_ANY:
+				snprintf(s1, sizeof(s1), "icmp or icmpv6");
+				break;
+			default:
+				goto dont_add;
+		}
+		if (buf[1]) strncat(buf, " or ", len - strlen(buf) - 1);
+		strncat(buf, s1, len - strlen(buf) - 1);
+dont_add:
+		if (e) *e++ = c;
+		p = e;
+	}
+	if (!buf[1]) return false; // nothing added
+	strncat(buf, ")", len - strlen(buf) - 1);
+	return true;
+}
+static bool wf_make_ipf(char *opt, char *buf, size_t len)
+{
+	char *e, *p, c, s1[40];
+	ipp_filter ipf;
+
+	if (len < 3) return false;
+
+	for (p = opt, *buf = '(', buf[1] = 0; p;)
+	{
+		if ((e = strchr(p, ',')))
+		{
+			c = *e;
+			*e = 0;
+		}
+		if (!ipp_parse(p, &ipf)) return false;
+		switch(ipf.mode)
+		{
+			case FLTMODE_FILTER:
+				// NOTE: windivert can't walk ipv6 extension headers. instead of real protocol first ext header type will be matched
+				snprintf(s1, sizeof(s1), "ip.Protocol==%u or ipv6.NextHdr==%u", ipf.proto, ipf.proto);
+				break;
+			case FLTMODE_ANY:
+				snprintf(s1, sizeof(s1), "ip or ipv6");
+				break;
+			default:
+				goto dont_add;
+		}
+		if (buf[1]) strncat(buf, " or ", len - strlen(buf) - 1);
+		strncat(buf, s1, len - strlen(buf) - 1);
+dont_add:
+		if (e) *e++ = c;
+		p = e;
+	}
+	if (!buf[1]) return false; // nothing added
+	strncat(buf, ")", len - strlen(buf) - 1);
+	return true;
+}
 
 #define DIVERT_NO_LOCALNETSv4_DST "(" \
                    "(ip.DstAddr < 127.0.0.1 or ip.DstAddr > 127.255.255.255) and " \
@@ -1306,6 +1461,8 @@ static bool wf_make_filter(
 	const char *pf_tcp_src_out, const char *pf_tcp_dst_out,
 	const char *pf_tcp_src_in, const char *pf_tcp_dst_in,
 	const char *pf_udp_src_in, const char *pf_udp_dst_out,
+	const char *icf_out, const char *icf_in,
+	const char *ipf_out, const char *ipf_in,
 	const struct str_list_head *wf_raw_part,
 	bool bFilterOutLAN, bool bFilterOutLoopback)
 {
@@ -1353,6 +1510,11 @@ static bool wf_make_filter(
 	}
 	if (*pf_udp_dst_out) snprintf(wf + strlen(wf), len - strlen(wf), " or\n outbound and %s", pf_udp_dst_out);
 	if (*pf_udp_src_in) snprintf(wf + strlen(wf), len - strlen(wf), " or\n inbound and %s", pf_udp_src_in);
+
+	if (*icf_in) snprintf(wf + strlen(wf), len - strlen(wf), " or\n inbound and %s", icf_in);
+	if (*icf_out) snprintf(wf + strlen(wf), len - strlen(wf), " or\n outbound and %s", icf_out);
+	if (*ipf_in) snprintf(wf + strlen(wf), len - strlen(wf), " or\n inbound and %s", ipf_in);
+	if (*ipf_out) snprintf(wf + strlen(wf), len - strlen(wf), " or\n outbound and %s", ipf_out);
 
 	snprintf(wf + strlen(wf), len - strlen(wf), "\n)");
 
@@ -1403,6 +1565,7 @@ static void exithelp(void)
 		" --version\t\t\t\t\t\t; print version and exit\n"
 		" --dry-run\t\t\t\t\t\t; verify parameters and exit with code 0 if successful\n"
 		" --comment=any_text\n"
+		" --intercept=0|1\t\t\t\t\t; enable interception. if disabled - run lua-init and exit\n"
 #ifdef __linux__
 		" --qnum=<nfqueue_number>\n"
 #elif defined(BSD)
@@ -1433,10 +1596,14 @@ static void exithelp(void)
 		" --wf-iface=<int>[.<int>]\t\t\t\t; numeric network interface and subinterface indexes\n"
 		" --wf-l3=ipv4|ipv6\t\t\t\t\t; L3 protocol filter. multiple comma separated values allowed.\n"
 		" --wf-tcp-in=[~]port1[-port2]\t\t\t\t; TCP in port filter. ~ means negation. multiple comma separated values allowed.\n"
-		" --wf-udp-in=[~]port1[-port2]\t\t\t\t; UDP in port filter. ~ means negation. multiple comma separated values allowed.\n"
 		" --wf-tcp-out=[~]port1[-port2]\t\t\t\t; TCP out port filter. ~ means negation. multiple comma separated values allowed.\n"
+		" --wf-udp-in=[~]port1[-port2]\t\t\t\t; UDP in port filter. ~ means negation. multiple comma separated values allowed.\n"
 		" --wf-udp-out=[~]port1[-port2]\t\t\t\t; UDP out port filter. ~ means negation. multiple comma separated values allowed.\n"
 		" --wf-tcp-empty=[0|1]\t\t\t\t\t; enable processing of empty tcp packets without flags SYN,RST,FIN (default : 0)\n"
+		" --wf-icmp-in=type[:code]\t\t\t\t; ICMP out filter. multiple comma separated values allowed.\n"
+		" --wf-icmp-out=type[:code]\t\t\t\t; ICMP in filter. multiple comma separated values allowed.\n"
+		" --wf-ipp-in=proto\t\t\t\t\t; IP protocol in filter. multiple comma separated values allowed.\n"
+		" --wf-ipp-out=proto\t\t\t\t\t; IP protocol out filter. multiple comma separated values allowed.\n"
 		" --wf-raw-part=<filter>|@<filename>\t\t\t; partial raw windivert filter string or filename\n"
 		" --wf-filter-lan=0|1\t\t\t\t\t; add excluding filter for non-global IP (default : 1)\n"
 		" --wf-filter-loopback=0|1\t\t\t\t; add excluding filter for loopback (default : 1)\n"
@@ -1461,8 +1628,10 @@ static void exithelp(void)
 		" --cookie[=<string>]\t\t\t\t\t; pass this profile-bound string to LUA\n"
 		" --import=<name>\t\t\t\t\t; populate current profile with template data\n"
 		" --filter-l3=ipv4|ipv6\t\t\t\t\t; L3 protocol filter. multiple comma separated values allowed.\n"
-		" --filter-tcp=[~]port1[-port2]|*\t\t\t; TCP port filter. ~ means negation. setting tcp and not setting udp filter denies udp. comma separated list allowed.\n"
-		" --filter-udp=[~]port1[-port2]|*\t\t\t; UDP port filter. ~ means negation. setting udp and not setting tcp filter denies tcp. comma separated list allowed.\n"
+		" --filter-tcp=[~]port1[-port2]|*\t\t\t; TCP port filter. ~ means negation. setting tcp filter and not setting others denies others. comma separated list allowed.\n"
+		" --filter-udp=[~]port1[-port2]|*\t\t\t; UDP port filter. ~ means negation. setting udp filter and not setting others denies others. comma separated list allowed.\n"
+		" --filter-icmp=type[:code]|*\t\t\t\t; ICMP type+code filter. setting icmp filter and not setting others denies others. comma separated list allowed.\n"
+		" --filter-ipp=proto\t\t\t\t\t; IP protocol filter. setting up ipp filter and not setting others denies others. comma separated list allowed.\n"
 		" --filter-l7=proto[,proto]\t\t\t\t; L6-L7 protocol filter : %s\n"
 #ifdef HAS_FILTER_SSID
 		" --filter-ssid=ssid1[,ssid2,ssid3,...]\t\t\t; per profile wifi SSID filter\n"
@@ -1504,7 +1673,7 @@ static void exithelp(void)
 		HOSTLIST_AUTO_UDP_OUT, HOSTLIST_AUTO_UDP_IN,
 		all_payloads
 	);
-	exit(1);
+	close_std_and_exit(1);
 }
 static void exithelp_clean(void)
 {
@@ -1553,6 +1722,7 @@ static void ApplyDefaultBlobs(struct blob_collection_head *blobs)
 enum opt_indices {
 	IDX_DEBUG,
 	IDX_DRY_RUN,
+	IDX_INTERCEPT,
 	IDX_VERSION,
 	IDX_COMMENT,
 #ifdef __linux__
@@ -1610,6 +1780,8 @@ enum opt_indices {
 	IDX_FILTER_L3,
 	IDX_FILTER_TCP,
 	IDX_FILTER_UDP,
+	IDX_FILTER_ICMP,
+	IDX_FILTER_IPP,
 	IDX_FILTER_L7,
 #ifdef HAS_FILTER_SSID
 	IDX_FILTER_SSID,
@@ -1632,6 +1804,10 @@ enum opt_indices {
 	IDX_WF_UDP_IN,
 	IDX_WF_UDP_OUT,
 	IDX_WF_TCP_EMPTY,
+	IDX_WF_ICMP_IN,
+	IDX_WF_ICMP_OUT,
+	IDX_WF_IPP_IN,
+	IDX_WF_IPP_OUT,
 	IDX_WF_RAW,
 	IDX_WF_RAW_PART,
 	IDX_WF_FILTER_LAN,
@@ -1648,6 +1824,7 @@ enum opt_indices {
 static const struct option long_options[] = {
 	[IDX_DEBUG] = {"debug", optional_argument, 0, 0},
 	[IDX_DRY_RUN] = {"dry-run", no_argument, 0, 0},
+	[IDX_INTERCEPT] = {"intercept", optional_argument, 0, 0},
 	[IDX_VERSION] = {"version", no_argument, 0, 0},
 	[IDX_COMMENT] = {"comment", optional_argument, 0, 0},
 #ifdef __linux__
@@ -1702,6 +1879,8 @@ static const struct option long_options[] = {
 	[IDX_FILTER_L3] = {"filter-l3", required_argument, 0, 0},
 	[IDX_FILTER_TCP] = {"filter-tcp", required_argument, 0, 0},
 	[IDX_FILTER_UDP] = {"filter-udp", required_argument, 0, 0},
+	[IDX_FILTER_ICMP] = {"filter-icmp", required_argument, 0, 0},
+	[IDX_FILTER_IPP] = {"filter-ipp", required_argument, 0, 0},
 	[IDX_FILTER_L7] = {"filter-l7", required_argument, 0, 0},
 #ifdef HAS_FILTER_SSID
 	[IDX_FILTER_SSID] = {"filter-ssid", required_argument, 0, 0},
@@ -1724,6 +1903,10 @@ static const struct option long_options[] = {
 	[IDX_WF_UDP_IN] = {"wf-udp-in", required_argument, 0, 0},
 	[IDX_WF_UDP_OUT] = {"wf-udp-out", required_argument, 0, 0},
 	[IDX_WF_TCP_EMPTY] = {"wf-tcp-empty", optional_argument, 0, 0},
+	[IDX_WF_ICMP_IN] = {"wf-icmp-in", required_argument, 0, 0},
+	[IDX_WF_ICMP_OUT] = {"wf-icmp-out", required_argument, 0, 0},
+	[IDX_WF_IPP_IN] = {"wf-ipp-in", required_argument, 0, 0},
+	[IDX_WF_IPP_OUT] = {"wf-ipp-out", required_argument, 0, 0},
 	[IDX_WF_RAW] = {"wf-raw", required_argument, 0, 0},
 	[IDX_WF_RAW_PART] = {"wf-raw-part", required_argument, 0, 0},
 	[IDX_WF_FILTER_LAN] = {"wf-filter-lan", required_argument, 0, 0},
@@ -1736,6 +1919,29 @@ static const struct option long_options[] = {
 #endif
 	[IDX_LAST] = {NULL, 0, NULL, 0},
 };
+
+
+#ifdef __CYGWIN__
+#define TITLE_ICON MAKEINTRESOURCE(1)
+static void WinSetIcon(void)
+{
+	HWND hConsole = GetConsoleWindow();
+	HICON hIcon,hIconOld;
+	if (hConsole)
+	{
+		if ((hIcon = LoadImage(GetModuleHandle(NULL),TITLE_ICON,IMAGE_ICON,32,32,LR_DEFAULTCOLOR|LR_SHARED)))
+		{
+			hIconOld = (HICON)SendMessage(hConsole, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+			if (hIconOld) DestroyIcon(hIconOld);
+		}
+		if ((hIcon = LoadImage(GetModuleHandle(NULL),TITLE_ICON,IMAGE_ICON,0,0,LR_DEFAULTCOLOR|LR_SHARED)))
+		{
+			hIconOld = (HICON)SendMessage(hConsole, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+			if (hIconOld) DestroyIcon(hIconOld);
+		}
+	}
+}
+#endif
 
 
 #define STRINGIFY(x) #x
@@ -1754,6 +1960,7 @@ static const struct option long_options[] = {
 #endif
 #endif
 
+enum {WF_TCP_IN, WF_UDP_IN, WF_TCP_OUT, WF_UDP_OUT, WF_ICMP_IN, WF_ICMP_OUT, WF_IPP_IN, WF_IPP_OUT, WF_RAW, WF_RAWF_PART, GLOBAL_SSID_FILTER, GLOBAL_NLM_FILTER, WF_RAWF, WF_COUNT} t_wf_index;
 int main(int argc, char **argv)
 {
 #ifdef __CYGWIN__
@@ -1762,6 +1969,9 @@ int main(int argc, char **argv)
 		// we were running as service. now exit.
 		return 0;
 	}
+	WinSetIcon();
+	MAKE_VER(params.verstr, sizeof(params.verstr));
+	printf("%s\n\n",params.verstr);
 #endif
 	int result, v;
 	int option_index = 0;
@@ -1774,23 +1984,22 @@ int main(int argc, char **argv)
 	char wf_save_file[256]="";
 	bool wf_ipv4 = true, wf_ipv6 = true, wf_filter_lan = true, wf_filter_loopback = true, wf_tcp_empty = false;
 	unsigned int IfIdx = 0, SubIfIdx = 0;
-	unsigned int hash_wf_tcp_in = 0, hash_wf_udp_in = 0, hash_wf_tcp_out = 0, hash_wf_udp_out = 0, hash_wf_raw = 0, hash_wf_raw_part = 0, hash_ssid_filter = 0, hash_nlm_filter = 0;
+	unsigned int hash_wf[WF_COUNT];
 #endif
 
 	if (argc < 2) exithelp();
 
 	srandom(time(NULL));
 	aes_init_keygen_tables(); // required for aes
+	mask_from_bitcount6_prepare();
 	set_env_exedir(argv[0]);
 	set_console_io_buffering();
 #ifdef __CYGWIN__
+	memset(hash_wf,0,sizeof(hash_wf));
 	prepare_low_appdata();
 #endif
 
 	init_params(&params);
-
-	MAKE_VER(params.verstr, sizeof(params.verstr));
-	printf("%s\n\n",params.verstr);
 
 	ApplyDefaultBlobs(&params.blobs);
 
@@ -1818,22 +2027,10 @@ int main(int argc, char **argv)
 
 #ifdef __CYGWIN__
 	params.windivert_filter = malloc(WINDIVERT_MAX);
-	if (!params.windivert_filter)
+	if (!params.windivert_filter || !alloc_windivert_portfilters(&params))
 	{
 		DLOG_ERR("out of memory\n");
 		exit_clean(1);
-	}
-	char **wdbufs[] =
-		{&params.wf_pf_tcp_src_in, &params.wf_pf_tcp_dst_in, &params.wf_pf_udp_src_in, &params.wf_pf_udp_dst_in,
-		&params.wf_pf_tcp_src_out, &params.wf_pf_tcp_dst_out, &params.wf_pf_udp_src_out, &params.wf_pf_udp_dst_out};
-	for (v=0 ; v<(sizeof(wdbufs)/sizeof(*wdbufs)) ; v++)
-	{
-		if (!(*wdbufs[v] = malloc(WINDIVERT_PORTFILTER_MAX)))
-		{
-			DLOG_ERR("out of memory\n");
-			exit_clean(1);
-		}
-		**wdbufs[v] = 0;
 	}
 #endif
 
@@ -1897,6 +2094,9 @@ int main(int argc, char **argv)
 			break;
 		case IDX_DRY_RUN:
 			bDry = true;
+			break;
+		case IDX_INTERCEPT:
+			params.intercept = !optarg || atoi(optarg);
 			break;
 		case IDX_VERSION:
 			exit_clean(0);
@@ -2289,8 +2489,10 @@ int main(int argc, char **argv)
 				DLOG_ERR("Invalid port filter : %s\n", optarg);
 				exit_clean(1);
 			}
-			// deny udp if not set
-			if (!port_filters_deny_if_empty(&dp->pf_udp))
+			// deny others if not set
+			if (!port_filters_deny_if_empty(&dp->pf_udp) ||
+				!icmp_filters_deny_if_empty(&dp->icf) ||
+				!ipp_filters_deny_if_empty(&dp->ipf))
 				exit_clean(1);
 			break;
 		case IDX_FILTER_UDP:
@@ -2299,8 +2501,34 @@ int main(int argc, char **argv)
 				DLOG_ERR("Invalid port filter : %s\n", optarg);
 				exit_clean(1);
 			}
-			// deny tcp if not set
-			if (!port_filters_deny_if_empty(&dp->pf_tcp))
+			// deny others if not set
+			if (!port_filters_deny_if_empty(&dp->pf_tcp) ||
+				!icmp_filters_deny_if_empty(&dp->icf) ||
+				!ipp_filters_deny_if_empty(&dp->ipf))
+				exit_clean(1);
+			break;
+		case IDX_FILTER_ICMP:
+			if (!parse_icf_list(optarg, &dp->icf))
+			{
+				DLOG_ERR("Invalid icmp filter : %s\n", optarg);
+				exit_clean(1);
+			}
+			// deny others if not set
+			if (!port_filters_deny_if_empty(&dp->pf_tcp) ||
+				!port_filters_deny_if_empty(&dp->pf_udp) ||
+				!ipp_filters_deny_if_empty(&dp->ipf))
+				exit_clean(1);
+			break;
+		case IDX_FILTER_IPP:
+			if (!parse_ipp_list(optarg, &dp->ipf))
+			{
+				DLOG_ERR("Invalid ip protocol filter : %s\n", optarg);
+				exit_clean(1);
+			}
+			// deny others if not set
+			if (!port_filters_deny_if_empty(&dp->pf_tcp) ||
+				!port_filters_deny_if_empty(&dp->pf_udp) ||
+				!icmp_filters_deny_if_empty(&dp->icf))
 				exit_clean(1);
 			break;
 		case IDX_FILTER_L7:
@@ -2415,7 +2643,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case IDX_WF_TCP_IN:
-			hash_wf_tcp_in = hash_jen(optarg, strlen(optarg));
+			hash_wf[WF_TCP_IN] = hash_jen(optarg, strlen(optarg));
 			if (!wf_make_pf(optarg, "tcp", "SrcPort", params.wf_pf_tcp_src_in, WINDIVERT_PORTFILTER_MAX) ||
 				!wf_make_pf(optarg, "tcp", "DstPort", params.wf_pf_tcp_dst_in, WINDIVERT_PORTFILTER_MAX))
 			{
@@ -2424,7 +2652,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case IDX_WF_TCP_OUT:
-			hash_wf_tcp_out = hash_jen(optarg, strlen(optarg));
+			hash_wf[WF_TCP_OUT] = hash_jen(optarg, strlen(optarg));
 			if (!wf_make_pf(optarg, "tcp", "SrcPort", params.wf_pf_tcp_src_out, WINDIVERT_PORTFILTER_MAX) ||
 				!wf_make_pf(optarg, "tcp", "DstPort", params.wf_pf_tcp_dst_out, WINDIVERT_PORTFILTER_MAX))
 			{
@@ -2433,7 +2661,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case IDX_WF_UDP_IN:
-			hash_wf_udp_in = hash_jen(optarg, strlen(optarg));
+			hash_wf[WF_UDP_IN] = hash_jen(optarg, strlen(optarg));
 			if (!wf_make_pf(optarg, "udp", "SrcPort", params.wf_pf_udp_src_in, WINDIVERT_PORTFILTER_MAX) ||
 				!wf_make_pf(optarg, "udp", "DstPort", params.wf_pf_udp_dst_in, WINDIVERT_PORTFILTER_MAX))
 			{
@@ -2442,7 +2670,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case IDX_WF_UDP_OUT:
-			hash_wf_udp_out = hash_jen(optarg, strlen(optarg));
+			hash_wf[WF_UDP_OUT] = hash_jen(optarg, strlen(optarg));
 			if (!wf_make_pf(optarg, "udp", "SrcPort", params.wf_pf_udp_src_out, WINDIVERT_PORTFILTER_MAX) ||
 				!wf_make_pf(optarg, "udp", "DstPort", params.wf_pf_udp_dst_out, WINDIVERT_PORTFILTER_MAX))
 			{
@@ -2450,8 +2678,40 @@ int main(int argc, char **argv)
 				exit_clean(1);
 			}
 			break;
+		case IDX_WF_ICMP_IN:
+			hash_wf[WF_ICMP_IN] = hash_jen(optarg, strlen(optarg));
+			if (!wf_make_icf(optarg, params.wf_icf_in, WINDIVERT_PORTFILTER_MAX))
+			{
+				DLOG_ERR("bad value for --wf-icmp-in\n");
+				exit_clean(1);
+			}
+			break;
+		case IDX_WF_ICMP_OUT:
+			hash_wf[WF_ICMP_OUT] = hash_jen(optarg, strlen(optarg));
+			if (!wf_make_icf(optarg, params.wf_icf_out, WINDIVERT_PORTFILTER_MAX))
+			{
+				DLOG_ERR("bad value for --wf-icmp-out\n");
+				exit_clean(1);
+			}
+			break;
+		case IDX_WF_IPP_IN:
+			hash_wf[WF_IPP_IN] = hash_jen(optarg, strlen(optarg));
+			if (!wf_make_ipf(optarg, params.wf_ipf_in, WINDIVERT_PORTFILTER_MAX))
+			{
+				DLOG_ERR("bad value for --wf-ipp-in\n");
+				exit_clean(1);
+			}
+			break;
+		case IDX_WF_IPP_OUT:
+			hash_wf[WF_IPP_OUT] = hash_jen(optarg, strlen(optarg));
+			if (!wf_make_ipf(optarg, params.wf_ipf_out, WINDIVERT_PORTFILTER_MAX))
+			{
+				DLOG_ERR("bad value for --wf-ipp-out\n");
+				exit_clean(1);
+			}
+			break;
 		case IDX_WF_RAW:
-			hash_wf_raw = hash_jen(optarg, strlen(optarg));
+			hash_wf[WF_RAWF] = hash_jen(optarg, strlen(optarg));
 			if (optarg[0] == '@')
 			{
 				size_t sz = WINDIVERT_MAX-1;
@@ -2460,7 +2720,7 @@ int main(int argc, char **argv)
 			}
 			else
 			{
-				strncpy(params.windivert_filter, optarg, WINDIVERT_MAX);
+				snprintf(params.windivert_filter, WINDIVERT_MAX, "%s", optarg);
 				params.windivert_filter[WINDIVERT_MAX - 1] = '\0';
 			}
 			break;
@@ -2468,7 +2728,7 @@ int main(int argc, char **argv)
 			wf_tcp_empty = !optarg || atoi(optarg);
 			break;
 		case IDX_WF_RAW_PART:
-			hash_wf_raw_part ^= hash_jen(optarg, strlen(optarg));
+			hash_wf[WF_RAWF_PART] ^= hash_jen(optarg, strlen(optarg));
 			{
 				char *wfpart = malloc(WINDIVERT_MAX);
 				if (!wfpart)
@@ -2484,7 +2744,7 @@ int main(int argc, char **argv)
 				}
 				else
 				{
-					strncpy(wfpart, optarg, WINDIVERT_MAX);
+					snprintf(wfpart, WINDIVERT_MAX, "%s", optarg);
 					wfpart[WINDIVERT_MAX - 1] = '\0';
 				}
 				if (!strlist_add(&params.wf_raw_part, wfpart))
@@ -2510,7 +2770,7 @@ int main(int argc, char **argv)
 			bDupCheck = !optarg || !!atoi(optarg);
 			break;
 		case IDX_SSID_FILTER:
-			hash_ssid_filter = hash_jen(optarg, strlen(optarg));
+			hash_wf[GLOBAL_SSID_FILTER] = hash_jen(optarg, strlen(optarg));
 			if (!parse_strlist(optarg, &params.ssid_filter))
 			{
 				DLOG_ERR("strlist_add failed\n");
@@ -2518,7 +2778,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case IDX_NLM_FILTER:
-			hash_nlm_filter = hash_jen(optarg, strlen(optarg));
+			hash_wf[GLOBAL_NLM_FILTER] = hash_jen(optarg, strlen(optarg));
 			if (!parse_strlist(optarg, &params.nlm_filter))
 			{
 				DLOG_ERR("strlist_add failed\n");
@@ -2563,19 +2823,22 @@ int main(int argc, char **argv)
 #endif
 	argv = NULL; argc = 0;
 
+	if (params.intercept)
+	{
 #ifdef __linux__
-	if (params.qnum < 0)
-	{
-		DLOG_ERR("Need queue number (--qnum)\n");
-		exit_clean(1);
-	}
+		if (params.qnum < 0)
+		{
+			DLOG_ERR("Need queue number (--qnum)\n");
+			exit_clean(1);
+		}
 #elif defined(BSD)
-	if (!params.port)
-	{
-		DLOG_ERR("Need divert port (--port)\n");
-		exit_clean(1);
-	}
+		if (!params.port)
+		{
+			DLOG_ERR("Need divert port (--port)\n");
+			exit_clean(1);
+		}
 #endif
+	}
 
 	DLOG("adding low-priority default empty desync profile\n");
 	// add default empty profile
@@ -2659,37 +2922,50 @@ int main(int argc, char **argv)
 	dp_list_destroy(&params.desync_templates);
 
 #ifdef __CYGWIN__
-	if (!*params.windivert_filter)
+	if (params.intercept)
 	{
-		if (!*params.wf_pf_tcp_src_in && !*params.wf_pf_udp_src_in && !*params.wf_pf_tcp_src_out && !*params.wf_pf_udp_src_out && LIST_EMPTY(&params.wf_raw_part))
+		if (!*params.windivert_filter)
 		{
-			DLOG_ERR("windivert filter : must specify port or/and partial raw filter\n");
-			exit_clean(1);
+			if (!*params.wf_pf_tcp_src_in && !*params.wf_pf_udp_src_in && !*params.wf_pf_tcp_src_out && !*params.wf_pf_udp_src_out && !*params.wf_icf_in && !*params.wf_icf_out && !*params.wf_ipf_in && !*params.wf_ipf_out && LIST_EMPTY(&params.wf_raw_part))
+			{
+				DLOG_ERR("windivert filter : must specify port or/and partial raw filter\n");
+				exit_clean(1);
+			}
+			// exchange src/dst ports in server mode
+			bool b = params.server ?
+				wf_make_filter(params.windivert_filter, WINDIVERT_MAX, IfIdx, SubIfIdx, wf_ipv4, wf_ipv6,
+					wf_tcp_empty,
+					params.wf_pf_tcp_dst_out, params.wf_pf_tcp_src_out,
+					params.wf_pf_tcp_dst_in, params.wf_pf_tcp_src_in,
+					params.wf_pf_udp_dst_in, params.wf_pf_udp_src_out,
+					params.wf_icf_out, params.wf_icf_in,
+					params.wf_ipf_out, params.wf_ipf_in,
+					&params.wf_raw_part, wf_filter_lan, wf_filter_loopback) :
+				wf_make_filter(params.windivert_filter, WINDIVERT_MAX, IfIdx, SubIfIdx, wf_ipv4, wf_ipv6,
+					wf_tcp_empty,
+					params.wf_pf_tcp_src_out, params.wf_pf_tcp_dst_out,
+					params.wf_pf_tcp_src_in, params.wf_pf_tcp_dst_in,
+					params.wf_pf_udp_src_in, params.wf_pf_udp_dst_out,
+					params.wf_icf_out, params.wf_icf_in,
+					params.wf_ipf_out, params.wf_ipf_in,
+					&params.wf_raw_part, wf_filter_lan, wf_filter_loopback);
+			cleanup_windivert_portfilters(&params);
+			if (!b)
+			{
+				DLOG_ERR("windivert filter : could not make filter\n");
+				exit_clean(1);
+			}
+			// free unneeded extra memory
+			char *p = realloc(params.windivert_filter, strlen(params.windivert_filter)+1);
+			if (p) params.windivert_filter=p;
 		}
-		// exchange src/dst ports in server mode
-		bool b = params.server ?
-			wf_make_filter(params.windivert_filter, WINDIVERT_MAX, IfIdx, SubIfIdx, wf_ipv4, wf_ipv6,
-				wf_tcp_empty,
-				params.wf_pf_tcp_dst_out, params.wf_pf_tcp_src_out,
-				params.wf_pf_tcp_dst_in, params.wf_pf_tcp_src_in,
-				params.wf_pf_udp_dst_in, params.wf_pf_udp_src_out,
-				&params.wf_raw_part, wf_filter_lan, wf_filter_loopback) :
-			wf_make_filter(params.windivert_filter, WINDIVERT_MAX, IfIdx, SubIfIdx, wf_ipv4, wf_ipv6,
-				wf_tcp_empty,
-				params.wf_pf_tcp_src_out, params.wf_pf_tcp_dst_out,
-				params.wf_pf_tcp_src_in, params.wf_pf_tcp_dst_in,
-				params.wf_pf_udp_src_in, params.wf_pf_udp_dst_out,
-				&params.wf_raw_part, wf_filter_lan, wf_filter_loopback);
-		cleanup_windivert_portfilters(&params);
-		if (!b)
-		{
-			DLOG_ERR("windivert filter : could not make filter\n");
-			exit_clean(1);
-		}
-		// free unneeded extra memory
-		char *p = realloc(params.windivert_filter, strlen(params.windivert_filter)+1);
-		if (p) params.windivert_filter=p;
 	}
+	else
+	{
+		// do not intercept anything. only required for rawsend
+		snprintf(params.windivert_filter,WINDIVERT_MAX,"false");
+	}
+
 	DLOG("windivert filter size: %zu\nwindivert filter:\n%s\n", strlen(params.windivert_filter), params.windivert_filter);
 	if (*wf_save_file)
 	{
@@ -2705,11 +2981,10 @@ int main(int argc, char **argv)
 		}
 	}
 	HANDLE hMutexArg = NULL;
-	if (bDupCheck)
+	if (bDupCheck && params.intercept)
 	{
-		char mutex_name[128];
-		snprintf(mutex_name, sizeof(mutex_name), "Global\\winws2_arg_%u_%u_%u_%u_%u_%u_%u_%u_%u_%u_%u_%u",
-			hash_wf_tcp_in, hash_wf_udp_in, hash_wf_tcp_out, hash_wf_udp_out, hash_wf_raw, hash_wf_raw_part, hash_ssid_filter, hash_nlm_filter, IfIdx, SubIfIdx, wf_ipv4, wf_ipv6);
+		char mutex_name[32];
+		snprintf(mutex_name, sizeof(mutex_name), "Global\\winws2_arg_%u", hash_jen(hash_wf, sizeof(hash_wf)));
 
 		hMutexArg = CreateMutexA(NULL, TRUE, mutex_name);
 		if (hMutexArg && GetLastError() == ERROR_ALREADY_EXISTS)
@@ -2768,6 +3043,7 @@ ex:
 		CloseHandle(hMutexArg);
 	}
 #endif
+	close_std();
 	return result;
 exiterr:
 	result = 1;

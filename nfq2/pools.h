@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "helpers.h"
+#include "filter.h"
 
 //#define HASH_BLOOM 20
 #define HASH_NONFATAL_OOM 1
@@ -186,9 +187,28 @@ struct port_filter_item {
 LIST_HEAD(port_filters_head, port_filter_item);
 bool port_filter_add(struct port_filters_head *head, const port_filter *pf);
 void port_filters_destroy(struct port_filters_head *head);
-bool port_filters_in_range(const struct port_filters_head *head, uint16_t port);
+bool port_filters_match(const struct port_filters_head *head, uint16_t port);
 bool port_filters_deny_if_empty(struct port_filters_head *head);
 
+struct icmp_filter_item {
+	icmp_filter icf;
+	LIST_ENTRY(icmp_filter_item) next;
+};
+LIST_HEAD(icmp_filters_head, icmp_filter_item);
+bool icmp_filter_add(struct icmp_filters_head *head, const icmp_filter *icf);
+void icmp_filters_destroy(struct icmp_filters_head *head);
+bool icmp_filters_match(const struct icmp_filters_head *head, uint8_t type, uint8_t code);
+bool icmp_filters_deny_if_empty(struct icmp_filters_head *head);
+
+struct ipp_filter_item {
+	ipp_filter ipp;
+	LIST_ENTRY(ipp_filter_item) next;
+};
+LIST_HEAD(ipp_filters_head, ipp_filter_item);
+bool ipp_filter_add(struct ipp_filters_head *head, const ipp_filter *ipp);
+void ipp_filters_destroy(struct ipp_filters_head *head);
+bool ipp_filters_match(const struct ipp_filters_head *head, uint8_t proto);
+bool ipp_filters_deny_if_empty(struct ipp_filters_head *head);
 
 struct blob_item {
 	uint8_t *data;	// main data blob

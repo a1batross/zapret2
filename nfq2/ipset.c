@@ -59,7 +59,7 @@ bool AppendIpsetItem(ipset *ips, char *ip)
 
 static bool AppendIpset(ipset *ips, const char *filename)
 {
-	char *p, *e, s[256], *zbuf;
+	char *p, *e, s[4096], *zbuf;
 	size_t zsize;
 	int ct = 0;
 	FILE *F;
@@ -215,7 +215,11 @@ bool IpsetsReloadCheckForProfile(const struct desync_profile *dp)
 	return IpsetsReloadCheck(&dp->ips_collection) && IpsetsReloadCheck(&dp->ips_collection_exclude);
 }
 
-static bool IpsetCheck_(const struct ipset_collection_head *ips, const struct ipset_collection_head *ips_exclude, const struct in_addr *ipv4, const struct in6_addr *ipv6)
+static bool IpsetCheck_(
+	const struct ipset_collection_head *ips, const struct ipset_collection_head *ips_exclude,
+	const struct in_addr *ipv4, const struct in6_addr *ipv6,
+	const struct in_addr *ipv4r, const struct in6_addr *ipv6r
+)
 {
 	struct ipset_item *item;
 
@@ -227,6 +231,12 @@ static bool IpsetCheck_(const struct ipset_collection_head *ips, const struct ip
 		DLOG("[%s] exclude ",item->hfile->filename ? item->hfile->filename : "fixed");
 		if (SearchIpset(&item->hfile->ipset, ipv4, ipv6))
 			return false;
+		if (ipv4r || ipv6r)
+		{
+			DLOG("[%s] exclude ",item->hfile->filename ? item->hfile->filename : "fixed");
+			if (SearchIpset(&item->hfile->ipset, ipv4r, ipv6r))
+				return false;
+		}
 	}
 	// old behavior compat: all include lists are empty means check passes
 	if (!ipset_collection_is_empty(ips))
@@ -236,17 +246,26 @@ static bool IpsetCheck_(const struct ipset_collection_head *ips, const struct ip
 			DLOG("[%s] include ",item->hfile->filename ? item->hfile->filename : "fixed");
 			if (SearchIpset(&item->hfile->ipset, ipv4, ipv6))
 				return true;
+			if (ipv4r || ipv6r)
+			{
+				DLOG("[%s] include ",item->hfile->filename ? item->hfile->filename : "fixed");
+				if (SearchIpset(&item->hfile->ipset, ipv4r, ipv6r))
+					return true;
+			}
 		}
 		return false;
 	}
 	return true;
 }
 
-bool IpsetCheck(const struct desync_profile *dp, const struct in_addr *ipv4, const struct in6_addr *ipv6)
+bool IpsetCheck(
+	const struct desync_profile *dp,
+	const struct in_addr *ipv4, const struct in6_addr *ipv6,
+	const struct in_addr *ipv4r, const struct in6_addr *ipv6r)
 {
 	if (PROFILE_IPSETS_ABSENT(dp)) return true;
 	DLOG("* ipset check for profile %u (%s)\n",dp->n,PROFILE_NAME(dp));
-	return IpsetCheck_(&dp->ips_collection,&dp->ips_collection_exclude,ipv4,ipv6);
+	return IpsetCheck_(&dp->ips_collection,&dp->ips_collection_exclude,ipv4,ipv6,ipv4r,ipv6r);
 }
 
 

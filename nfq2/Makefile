@@ -10,11 +10,11 @@ LIBS =
 LIBS_LINUX = -lz -lnetfilter_queue -lnfnetlink -lmnl -lm
 LIBS_SYSTEMD = -lsystemd
 LIBS_BSD = -lz -lm
-LIBS_CYGWIN = -lz -Lwindows/windivert -Iwindows -lwlanapi -lole32 -loleaut32
+LIBS_CYGWIN = -lz -Lwindows/windivert -Iwindows -lwlanapi -lole32 -loleaut32 -liphlpapi -lntdll
 LIBS_CYGWIN32 = -lwindivert32
 LIBS_CYGWIN64 = -lwindivert64
-RES_CYGWIN32 = windows/res/32/winmanifest.o windows/res/32/winicon.o
-RES_CYGWIN64 = windows/res/64/winmanifest.o windows/res/64/winicon.o
+RES_CYGWIN32 = windows/res/winws_res32.o
+RES_CYGWIN64 = windows/res/winws_res64.o
 SRC_FILES = *.c crypto/*.c
 
 LUA_JIT?=1

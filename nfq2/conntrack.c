@@ -70,7 +70,7 @@ void ConntrackPoolInit(t_conntrack *p, time_t purge_interval, uint32_t timeout_s
 	p->pool = NULL;
 }
 
-void ConntrackExtractConn(t_conn *c, bool bReverse, const struct dissect *dis)
+bool ConntrackExtractConn(t_conn *c, bool bReverse, const struct dissect *dis)
 {
 	memset(c, 0, sizeof(*c));
 	if (dis->ip)
@@ -86,8 +86,9 @@ void ConntrackExtractConn(t_conn *c, bool bReverse, const struct dissect *dis)
 		c->src.ip6 = bReverse ? dis->ip6->ip6_dst : dis->ip6->ip6_src;
 	}
 	else
-		c->l3proto = -1;
+		return false;
 	extract_ports(dis->tcp, dis->udp, &c->l4proto, bReverse ? &c->dport : &c->sport, bReverse ? &c->sport : &c->dport);
+	return c->l4proto!=IPPROTO_NONE;
 }
 
 
@@ -225,7 +226,7 @@ static bool ConntrackPoolDoubleSearchPool(t_conntrack_pool **pp, const struct di
 	t_conn conn, connswp;
 	t_conntrack_pool *ctr;
 
-	ConntrackExtractConn(&conn, false, dis);
+	if (!ConntrackExtractConn(&conn, false, dis)) return false;
 	if ((ctr = ConntrackPoolSearch(*pp, &conn)))
 	{
 		if (bReverse) *bReverse = false;
@@ -256,7 +257,7 @@ static bool ConntrackPoolFeedPool(t_conntrack_pool **pp, const struct dissect *d
 	bool b_rev;
 	uint8_t proto = dis->tcp ? IPPROTO_TCP : dis->udp ? IPPROTO_UDP : IPPROTO_NONE;
 
-	ConntrackExtractConn(&conn, false, dis);
+	if (!ConntrackExtractConn(&conn, false, dis)) return false;
 	if ((ctr = ConntrackPoolSearch(*pp, &conn)))
 	{
 		ConntrackFeedPacket(&ctr->track, (b_rev = false), dis);
@@ -296,7 +297,7 @@ static bool ConntrackPoolDropPool(t_conntrack_pool **pp, const struct dissect *d
 {
 	t_conn conn, connswp;
 	t_conntrack_pool *t;
-	ConntrackExtractConn(&conn, false, dis);
+	if (!ConntrackExtractConn(&conn, false, dis)) return false;
 	if (!(t = ConntrackPoolSearch(*pp, &conn)))
 	{
 		connswap(&conn, &connswp);

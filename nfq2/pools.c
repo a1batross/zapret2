@@ -742,14 +742,14 @@ void port_filters_destroy(struct port_filters_head *head)
 		free(entry);
 	}
 }
-bool port_filters_in_range(const struct port_filters_head *head, uint16_t port)
+bool port_filters_match(const struct port_filters_head *head, uint16_t port)
 {
 	const struct port_filter_item *item;
 
 	if (LIST_EMPTY(head)) return true;
 	LIST_FOREACH(item, head, next)
 	{
-		if (pf_in_range(port, &item->pf))
+		if (pf_match(port, &item->pf))
 			return true;
 	}
 	return false;
@@ -761,6 +761,83 @@ bool port_filters_deny_if_empty(struct port_filters_head *head)
 	return pf_parse("0",&pf) && port_filter_add(head,&pf);
 }
 
+
+bool icmp_filter_add(struct icmp_filters_head *head, const icmp_filter *icf)
+{
+	struct icmp_filter_item *entry = malloc(sizeof(struct icmp_filter_item));
+	if (entry)
+	{
+		entry->icf = *icf;
+		LIST_INSERT_HEAD(head, entry, next);
+	}
+	return entry;
+}
+void icmp_filters_destroy(struct icmp_filters_head *head)
+{
+	struct icmp_filter_item *entry;
+	while ((entry = LIST_FIRST(head)))
+	{
+		LIST_REMOVE(entry, next);
+		free(entry);
+	}
+}
+bool icmp_filters_match(const struct icmp_filters_head *head, uint8_t type, uint8_t code)
+{
+	const struct icmp_filter_item *item;
+
+	if (LIST_EMPTY(head)) return true;
+	LIST_FOREACH(item, head, next)
+	{
+		if (icf_match(type, code, &item->icf))
+			return true;
+	}
+	return false;
+}
+bool icmp_filters_deny_if_empty(struct icmp_filters_head *head)
+{
+	icmp_filter icf;
+	if (!LIST_EMPTY(head)) return true;
+	return icf_parse("-",&icf) && icmp_filter_add(head,&icf);
+}
+
+
+bool ipp_filter_add(struct ipp_filters_head *head, const ipp_filter *ipp)
+{
+	struct ipp_filter_item *entry = malloc(sizeof(struct ipp_filter_item));
+	if (entry)
+	{
+		entry->ipp = *ipp;
+		LIST_INSERT_HEAD(head, entry, next);
+	}
+	return entry;
+}
+void ipp_filters_destroy(struct ipp_filters_head *head)
+{
+	struct ipp_filter_item *entry;
+	while ((entry = LIST_FIRST(head)))
+	{
+		LIST_REMOVE(entry, next);
+		free(entry);
+	}
+}
+bool ipp_filters_match(const struct ipp_filters_head *head, uint8_t proto)
+{
+	const struct ipp_filter_item *item;
+
+	if (LIST_EMPTY(head)) return true;
+	LIST_FOREACH(item, head, next)
+	{
+		if (ipp_match(proto, &item->ipp))
+			return true;
+	}
+	return false;
+}
+bool ipp_filters_deny_if_empty(struct ipp_filters_head *head)
+{
+	ipp_filter ipp;
+	if (!LIST_EMPTY(head)) return true;
+	return ipp_parse("-",&ipp) && ipp_filter_add(head,&ipp);
+}
 
 		
 struct blob_item *blob_collection_add(struct blob_collection_head *head)

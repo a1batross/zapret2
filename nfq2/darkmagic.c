@@ -33,6 +33,8 @@
 #define ERROR_INVALID_IMAGE_HASH __MSABI_LONG(577)
 #endif
 
+#include "nthacks.h"
+
 #endif
 
 #ifdef __linux__
@@ -98,11 +100,11 @@ bool tcp_syn_segment(const struct tcphdr *tcphdr)
 }
 
 
-void extract_ports(const struct tcphdr *tcphdr, const struct udphdr *udphdr, uint8_t *proto, uint16_t *sport, uint16_t *dport)
+void extract_ports(const struct tcphdr *tcphdr, const struct udphdr *udphdr,uint8_t *proto, uint16_t *sport, uint16_t *dport)
 {
 	if (sport) *sport  = htons(tcphdr ? tcphdr->th_sport : udphdr ? udphdr->uh_sport : 0);
 	if (dport) *dport  = htons(tcphdr ? tcphdr->th_dport : udphdr ? udphdr->uh_dport : 0);
-	if (proto) *proto = tcphdr ? IPPROTO_TCP : udphdr ? IPPROTO_UDP : -1;
+	if (proto) *proto = tcphdr ? IPPROTO_TCP : udphdr ? IPPROTO_UDP : IPPROTO_NONE;
 }
 
 bool extract_dst(const uint8_t *data, size_t len, struct sockaddr* dst)
@@ -174,6 +176,11 @@ void extract_endpoints(const struct ip *ip,const struct ip6_hdr *ip6hdr,const st
 			si->sin6_scope_id = 0;
 		}
 	}
+	else
+	{
+		memset(src,0,sizeof(*src));
+		memset(dst,0,sizeof(*dst));
+	}
 }
 
 const char *proto_name(uint8_t proto)
@@ -192,8 +199,6 @@ const char *proto_name(uint8_t proto)
 			return "igmp";
 		case IPPROTO_ESP:
 			return "esp";
-		case IPPROTO_AH:
-			return "ah";
 		case IPPROTO_IPV6:
 			return "6in4";
 		case IPPROTO_IPIP:
@@ -210,7 +215,7 @@ const char *proto_name(uint8_t proto)
 			return NULL;
 	}
 }
-static void str_proto_name(char *s, size_t s_len, uint8_t proto)
+void str_proto_name(char *s, size_t s_len, uint8_t proto)
 {
 	const char *name = proto_name(proto);
 	if (name)
@@ -227,6 +232,56 @@ uint16_t family_from_proto(uint8_t l3proto)
 		default: return -1;
 	}
 }
+
+const char *icmp_type_name(bool v6, uint8_t type)
+{
+	if (v6)
+	{
+		switch(type)
+		{
+		case ICMP6_ECHO_REQUEST: return "echo_req6";
+		case ICMP6_ECHO_REPLY: return "echo_reply6";
+		case ICMP6_DST_UNREACH: return "dest_unreach6";
+		case ICMP6_PACKET_TOO_BIG: return "packet_too_big";
+		case ICMP6_TIME_EXCEEDED: return "time_exceeded6";
+		case ICMP6_PARAM_PROB: return "param_problem6";
+		case MLD_LISTENER_QUERY: return "mld_listener_query";
+		case MLD_LISTENER_REPORT: return "mld_listener_report";
+		case MLD_LISTENER_REDUCTION: return "mld_listener_reduction";
+		case ND_ROUTER_SOLICIT: return "router_sol";
+		case ND_ROUTER_ADVERT: return "router_adv";
+		case ND_NEIGHBOR_SOLICIT: return "neigh_sol";
+		case ND_NEIGHBOR_ADVERT: return "neigh_adv";
+		case ND_REDIRECT: return "redirect6";
+		}
+	}
+	else
+	{
+		switch(type)
+		{
+		case ICMP_ECHOREPLY: return "echo_reply";
+		case ICMP_DEST_UNREACH: return "dest_unreach";
+		case ICMP_REDIRECT: return "redirect";
+		case ICMP_ECHO: return "echo_req";
+		case ICMP_TIME_EXCEEDED: return "time_exceeded";
+		case ICMP_PARAMETERPROB: return "param_problem";
+		case ICMP_TIMESTAMP: return "ts";
+		case ICMP_TIMESTAMPREPLY: return "ts_reply";
+		case ICMP_INFO_REQUEST: return "info_req";
+		case ICMP_INFO_REPLY: return "info_reply";
+		}
+	}
+	return NULL;
+}
+void str_icmp_type_name(char *s, size_t s_len, bool v6, uint8_t type)
+{
+	const char *name = icmp_type_name(v6, type);
+	if (name)
+		snprintf(s,s_len,"%s",name);
+	else
+		snprintf(s,s_len,"%u",type);
+}
+
 
 static void str_srcdst_ip(char *s, size_t s_len, const void *saddr,const void *daddr)
 {
@@ -298,7 +353,21 @@ void print_udphdr(const struct udphdr *udphdr)
 	str_udphdr(s,sizeof(s),udphdr);
 	printf("%s",s);
 }
-
+void str_icmphdr(char *s, size_t s_len, bool v6, const struct icmp46 *icmp)
+{
+	char stype[32];
+	str_icmp_type_name(stype,sizeof(stype),v6,icmp->icmp_type);
+	if (icmp->icmp_type==ICMP_ECHO || icmp->icmp_type==ICMP_ECHOREPLY || icmp->icmp_type==ICMP6_ECHO_REQUEST || icmp->icmp_type==ICMP6_ECHO_REPLY)
+		snprintf(s,s_len,"icmp_type=%s icmp_code=%u id=0x%04X seq=%u",stype,icmp->icmp_code,ntohs(icmp->icmp_data16[0]),ntohs(icmp->icmp_data16[1]));
+	else
+		snprintf(s,s_len,"icmp_type=%s icmp_code=%u data=0x%08X",stype,icmp->icmp_code,ntohl(icmp->icmp_data32));
+}
+void print_icmphdr(const struct icmp46 *icmp, bool v6)
+{
+	char s[48];
+	str_icmphdr(s,sizeof(s),v6,icmp);
+	printf("%s",s);
+}
 
 
 
@@ -340,7 +409,15 @@ void proto_skip_udp(const uint8_t **data, size_t *len)
 	*data += sizeof(struct udphdr);
 	*len -= sizeof(struct udphdr);
 }
-
+bool proto_check_icmp(const uint8_t *data, size_t len)
+{
+	return len >= sizeof(struct icmp46);
+}
+void proto_skip_icmp(const uint8_t **data, size_t *len)
+{
+	*data += sizeof(struct icmp46);
+	*len -= sizeof(struct icmp46);
+}
 bool proto_check_ipv6(const uint8_t *data, size_t len)
 {
 	return len >= sizeof(struct ip6_hdr) && (data[0] & 0xF0) == 0x60;
@@ -449,7 +526,7 @@ uint8_t *proto_find_ip6_exthdr(struct ip6_hdr *ip6, size_t len, uint8_t proto)
 	return NULL;
 }
 
-void proto_dissect_l3l4(const uint8_t *data, size_t len, struct dissect *dis)
+void proto_dissect_l3l4(const uint8_t *data, size_t len, struct dissect *dis, bool no_payload_check)
 {
 	const uint8_t *p;
 
@@ -466,7 +543,7 @@ void proto_dissect_l3l4(const uint8_t *data, size_t len, struct dissect *dis)
 		proto_skip_ipv4(&data, &len);
 		dis->len_l3 = data-p;
 	}
-	else if (proto_check_ipv6(data, len) && proto_check_ipv6_payload(data, len))
+	else if (proto_check_ipv6(data, len) && (no_payload_check || proto_check_ipv6_payload(data, len)))
 	{
 		dis->ip6 = (const struct ip6_hdr *) data;
 		p = data;
@@ -478,31 +555,36 @@ void proto_dissect_l3l4(const uint8_t *data, size_t len, struct dissect *dis)
 		return;
 	}
 
+	dis->transport_len = len;
+
 	if (dis->proto==IPPROTO_TCP && proto_check_tcp(data, len))
 	{
 		dis->tcp = (const struct tcphdr *) data;
-		dis->transport_len = len;
-
 		p = data;
 		proto_skip_tcp(&data, &len);
 		dis->len_l4 = data-p;
-
-		dis->data_payload = data;
-		dis->len_payload = len;
-
 	}
-	else if (dis->proto==IPPROTO_UDP && proto_check_udp(data, len) && proto_check_udp_payload(data, len))
+	else if (dis->proto==IPPROTO_UDP && proto_check_udp(data, len) && (no_payload_check || proto_check_udp_payload(data, len)))
 	{
 		dis->udp = (const struct udphdr *) data;
-		dis->transport_len = len;
-
 		p = data;
 		proto_skip_udp(&data, &len);
 		dis->len_l4 = data-p;
-
-		dis->data_payload = data;
-		dis->len_payload = len;
 	}
+	else if ((dis->proto==IPPROTO_ICMP || dis->proto==IPPROTO_ICMPV6) && proto_check_icmp(data, len))
+	{
+		dis->icmp = (const struct icmp46 *) data;
+		p = data;
+		proto_skip_icmp(&data, &len);
+		dis->len_l4 = data-p;
+	}
+	else
+	{
+		dis->len_l4 = 0;
+	}
+
+	dis->data_payload = data;
+	dis->len_payload = len;
 }
 
 void reverse_ip(struct ip *ip, struct ip6_hdr *ip6)
@@ -539,11 +621,136 @@ uint8_t ttl46(const struct ip *ip, const struct ip6_hdr *ip6)
 }
 
 
+bool get_source_ip4(const struct in_addr *target, struct in_addr *source)
+{
+	int sock = socket(AF_INET, SOCK_DGRAM, 0);
+	if (sock < 0) return false;
+
+	struct sockaddr_in serv,name;
+	socklen_t namelen;
+
+	memset(&serv,0,sizeof(serv)); // or valgrind complains about uninitialized
+	serv.sin_family = AF_INET;
+	serv.sin_addr = *target;
+	serv.sin_port = 0xFFFF;
+
+	// Connect triggers the kernel's route lookup
+	if (!connect(sock, (const struct sockaddr*)&serv, sizeof(serv)))
+	{
+		namelen = sizeof(name);
+		if (!getsockname(sock, (struct sockaddr*)&name, &namelen))
+		{
+			close(sock);
+			*source = name.sin_addr;
+			return true;
+		}
+	}
+	close(sock);
+	return false;
+}
+bool get_source_ip6(const struct in6_addr *target, struct in6_addr *source)
+{
+	int sock = socket(AF_INET6, SOCK_DGRAM, 0);
+	if (sock < 0) return false;
+
+	struct sockaddr_in6 serv,name;
+	socklen_t namelen;
+
+	memset(&serv,0,sizeof(serv)); // or valgrind complains about uninitialized
+	serv.sin6_family = AF_INET6;
+	serv.sin6_addr = *target;
+	serv.sin6_port = 0xFFFF;
+
+	// Connect triggers the kernel's route lookup
+	if (!connect(sock, (const struct sockaddr*)&serv, sizeof(serv)))
+	{
+		namelen = sizeof(name);
+		if (!getsockname(sock, (struct sockaddr*)&name, &namelen))
+		{
+			close(sock);
+			*source = name.sin6_addr;
+			return true;
+		}
+	}
+
+	close(sock);
+	return false;
+}
 
 
 #ifdef __CYGWIN__
 
 uint32_t w_win32_error=0;
+
+BOOL AdjustPrivileges(HANDLE hToken, const LPCTSTR *privs, BOOL bEnable)
+{
+	DWORD dwSize, k, n;
+	PTOKEN_PRIVILEGES TokenPrivsData;
+	LUID luid;
+
+	dwSize = 0;
+	GetTokenInformation(hToken, TokenPrivileges, NULL, 0, &dwSize );	// will fail
+	w_win32_error = GetLastError();
+	if (w_win32_error == ERROR_INSUFFICIENT_BUFFER)
+	{
+		w_win32_error = 0;
+		if (TokenPrivsData = (PTOKEN_PRIVILEGES)LocalAlloc(LMEM_FIXED, dwSize))
+		{
+			if (GetTokenInformation(hToken, TokenPrivileges, TokenPrivsData, dwSize, &dwSize))
+			{
+				n = 0;
+				while (privs[n])
+				{
+					if (LookupPrivilegeValue(NULL, privs[n], &luid))
+					{
+						w_win32_error = ERROR_PRIVILEGE_NOT_HELD;
+						for (k = 0; k < TokenPrivsData->PrivilegeCount; k++)
+							if (!memcmp(&TokenPrivsData->Privileges[k].Luid, &luid, sizeof(LUID)))
+							{
+								if (bEnable)
+									TokenPrivsData->Privileges[k].Attributes |= SE_PRIVILEGE_ENABLED;
+								else
+									TokenPrivsData->Privileges[k].Attributes &= ~SE_PRIVILEGE_ENABLED;
+								w_win32_error = 0;
+								break;
+							}
+					}
+					else
+						w_win32_error = GetLastError();
+					if (w_win32_error) break;
+					n++;
+				}
+				if (!w_win32_error)
+				{
+					if (!AdjustTokenPrivileges(hToken, FALSE, TokenPrivsData, 0, NULL, NULL))
+						w_win32_error = GetLastError();
+				}
+			}
+			else
+				w_win32_error = GetLastError();
+			LocalFree(TokenPrivsData);
+		}
+		else
+			w_win32_error = GetLastError();
+	}
+	return !w_win32_error;
+}
+BOOL AdjustPrivilegesForCurrentProcess(const LPCTSTR *privs, BOOL bEnable)
+{
+	HANDLE hTokenThisProcess;
+
+	w_win32_error = 0;
+	if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hTokenThisProcess))
+	{
+		if (!AdjustPrivileges(hTokenThisProcess, privs, bEnable))
+			w_win32_error = GetLastError();
+		CloseHandle(hTokenThisProcess);
+	}
+	else
+		w_win32_error = GetLastError();
+
+	return !w_win32_error;
+}
 
 static BOOL RemoveTokenPrivs(void)
 {
@@ -670,6 +877,26 @@ err:
 	if (!bRes) w_win32_error = GetLastError();
 	return bRes;
 }
+BOOL SetMandatoryLabelObject(HANDLE h, SE_OBJECT_TYPE ObjType, DWORD dwMandatoryLabelRID, DWORD dwAceRevision, DWORD dwAceFlags)
+{
+	BOOL bRes = FALSE;
+	DWORD dwErr;
+	char buf_label[16], buf_pacl[32];
+	PSID label = (PSID)buf_label;
+	PACL pacl = (PACL)buf_pacl;
+
+	InitializeSid(label, &label_authority, 1);
+	*GetSidSubAuthority(label, 0) = dwMandatoryLabelRID;
+	if (InitializeAcl(pacl, sizeof(buf_pacl), ACL_REVISION) && AddMandatoryAce(pacl, dwAceRevision, dwAceFlags, SYSTEM_MANDATORY_LABEL_NO_WRITE_UP, label))
+	{
+		dwErr = SetSecurityInfo(h, ObjType, LABEL_SECURITY_INFORMATION, NULL, NULL, NULL, pacl);
+		SetLastError(dwErr);
+		bRes = dwErr == ERROR_SUCCESS;
+	}
+	if (!bRes) w_win32_error = GetLastError();
+	return bRes;
+}
+
 
 bool ensure_file_access(const char *filename)
 {
@@ -703,6 +930,85 @@ bool prepare_low_appdata()
 	return b;
 }
 
+// cygwin uses nt directory to store it's state. low mandatory breaks write access there and cause some functions to fail
+// it's not possible to reproduce exact directory names, have to iterate and set low integrity to all
+BOOL RelaxCygwinNTDir()
+{
+	NTSTATUS status;
+	PROCESS_SESSION_INFORMATION psi;
+	WCHAR bno_name[32], cyg_name[256];
+	CHAR scyg_name[256];
+	UNICODE_STRING bno_us, cyg_us;
+	OBJECT_ATTRIBUTES attr;
+	HANDLE hDir, hDirCyg;
+	BYTE buf[4096];
+	ULONG context, rsize;
+	BOOL b,ball,restart;
+	POBJECT_DIRECTORY_INFORMATION pdir;
+
+	LPCTSTR Privs[] = { SE_TAKE_OWNERSHIP_NAME , NULL };
+
+	if (!AdjustPrivilegesForCurrentProcess(Privs, TRUE))
+		return FALSE;
+
+	status = NtQueryInformationProcess(GetCurrentProcess(),	ProcessSessionInformation, &psi, sizeof psi, NULL);
+	if (NT_SUCCESS(status))
+		swprintf(bno_name, sizeof(bno_name)/sizeof(*bno_name), L"\\Sessions\\BNOLINKS\\%u", psi.SessionId);
+	else
+		swprintf(bno_name, sizeof(bno_name)/sizeof(*bno_name), L"\\BaseNamedObjects");
+
+	RtlInitUnicodeString(&bno_us, bno_name);
+	InitializeObjectAttributes(&attr, &bno_us, 0, NULL, NULL);
+
+	ball = TRUE;
+	w_win32_error = 0;
+	status = NtOpenDirectoryObject(&hDir, DIRECTORY_QUERY, &attr);
+	if (NT_SUCCESS(status))
+	{
+		context = 0;
+		restart = TRUE;
+		while (NT_SUCCESS(status = NtQueryDirectoryObject(hDir, buf, sizeof(buf), restart, FALSE, &context, &rsize)))
+		{
+
+			for (pdir = (POBJECT_DIRECTORY_INFORMATION)buf; pdir->Name.Length; pdir++)
+				if (pdir->TypeName.Length == 18 && !memcmp(pdir->TypeName.Buffer, L"Directory", 18) &&
+					pdir->Name.Length >= 14 && !memcmp(pdir->Name.Buffer, L"cygwin1", 14))
+				{
+					swprintf(cyg_name, sizeof(cyg_name)/sizeof(*cyg_name), L"%ls\\%ls", bno_name, pdir->Name.Buffer);
+					if (!WideCharToMultiByte(CP_ACP, 0, cyg_name, -1, scyg_name, sizeof(scyg_name), NULL, NULL))
+						*scyg_name=0;
+					RtlInitUnicodeString(&cyg_us, cyg_name);
+					InitializeObjectAttributes(&attr, &cyg_us, 0, NULL, NULL);
+					status = NtOpenDirectoryObject(&hDirCyg, WRITE_OWNER, &attr);
+					if (NT_SUCCESS(status))
+					{
+						b = SetMandatoryLabelObject(hDirCyg, SE_KERNEL_OBJECT, SECURITY_MANDATORY_LOW_RID, ACL_REVISION_DS, 0);
+						if (!b)
+						{
+							w_win32_error = GetLastError();
+							DLOG_ERR("could not set integrity label on '%s' . error %u\n", scyg_name, w_win32_error);
+						}
+						else
+							DLOG("set low integrity label on '%s'\n", scyg_name);
+						ball = ball && b;
+						NtClose(hDirCyg);
+					}
+				}
+			restart = FALSE;
+		}
+		NtClose(hDir);
+	}
+	else
+	{
+		w_win32_error = RtlNtStatusToDosError(status);
+		return FALSE;
+	}
+
+	return ball;
+}
+
+
+
 BOOL JobSandbox()
 {
 	BOOL bRes = FALSE;
@@ -734,6 +1040,9 @@ bool win_sandbox(void)
 	// there's no way to return privs
 	if (!b_sandbox_set)
 	{
+		if (!RelaxCygwinNTDir())
+			DLOG_ERR("could not set low mandatory label on cygwin NT directory. some functions may not work. error %u\n", w_win32_error);
+
 		if (!RemoveTokenPrivs())
 			return FALSE;
 
@@ -1957,6 +2266,23 @@ void verdict_udp_csum_fix(uint8_t verdict, struct udphdr *udphdr, size_t transpo
 		#endif
 			DLOG("fixing udp checksum\n");
 			udp_fix_checksum(udphdr,transport_len,ip,ip6hdr);
+	}
+#endif
+}
+
+void verdict_icmp_csum_fix(uint8_t verdict, struct icmp46 *icmphdr, size_t transport_len, const struct ip6_hdr *ip6hdr)
+{
+	// always fix csum for windivert. original can be partial or bad
+	// FreeBSD tend to pass ipv6 frames with wrong checksum (OBSERVED EARLIER, MAY BE FIXED NOW)
+	// Linux passes correct checksums
+#ifndef __linux__
+	if (!(verdict & VERDICT_NOCSUM) && (verdict & VERDICT_MASK)==VERDICT_PASS)
+	{
+		#ifdef __FreeBSD__
+		if (ip6hdr)
+		#endif
+			DLOG("fixing icmp checksum\n");
+			icmp_fix_checksum(icmphdr,transport_len,ip6hdr);
 	}
 #endif
 }

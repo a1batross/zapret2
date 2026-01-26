@@ -85,55 +85,22 @@ time_t file_mod_time(const char *filename);
 bool file_size(const char *filename, off_t *size);
 bool file_open_test(const char *filename, int flags);
 
-typedef struct
-{
-	uint16_t from,to;
-	bool neg;
-} port_filter;
-bool pf_in_range(uint16_t port, const port_filter *pf);
-bool pf_parse(const char *s, port_filter *pf);
-bool pf_is_empty(const port_filter *pf);
-
-struct packet_pos
-{
-	char mode; // n - packets, d - data packets, s - relative sequence
-	unsigned int pos;
-};
-struct packet_range
-{
-	struct packet_pos from, to;
-	bool upper_cutoff; // true - do not include upper limit, false - include upper limit
-};
-#define PACKET_POS_NEVER (struct packet_pos){'x',0}
-#define PACKET_POS_ALWAYS (struct packet_pos){'a',0}
-#define PACKET_RANGE_NEVER (struct packet_range){PACKET_POS_NEVER,PACKET_POS_NEVER}
-#define PACKET_RANGE_ALWAYS (struct packet_range){PACKET_POS_ALWAYS,PACKET_POS_ALWAYS}
-bool packet_range_parse(const char *s, struct packet_range *range);
-
 void fill_random_bytes(uint8_t *p,size_t sz);
 void fill_random_az(uint8_t *p,size_t sz);
 void fill_random_az09(uint8_t *p,size_t sz);
 bool fill_crypto_random_bytes(uint8_t *p,size_t sz);
 
+void bxor(const uint8_t *x1, const uint8_t *x2, uint8_t *result, size_t sz);
+void band(const uint8_t *x1, const uint8_t *x2, uint8_t *result, size_t sz);
+void bor(const uint8_t *x1, const uint8_t *x2, uint8_t *result, size_t sz);
+
 void set_console_io_buffering(void);
+void close_std(void);
+void close_std_and_exit(int code);
 bool set_env_exedir(const char *argv0);
 
-
-struct cidr4
-{
-	struct in_addr addr;
-	uint8_t	preflen;
-};
-struct cidr6
-{
-	struct in6_addr addr;
-	uint8_t	preflen;
-};
-void str_cidr4(char *s, size_t s_len, const struct cidr4 *cidr);
-void print_cidr4(const struct cidr4 *cidr);
-void str_cidr6(char *s, size_t s_len, const struct cidr6 *cidr);
-void print_cidr6(const struct cidr6 *cidr);
-bool parse_cidr4(char *s, struct cidr4 *cidr);
-bool parse_cidr6(char *s, struct cidr6 *cidr);
-
 bool parse_int16(const char *p, int16_t *v);
+
+uint32_t mask_from_bitcount(uint32_t zct);
+void mask_from_bitcount6_prepare(void);
+const struct in6_addr *mask_from_bitcount6(uint32_t zct);

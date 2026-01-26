@@ -337,6 +337,8 @@ void dp_init_dynamic(struct desync_profile *dp)
 	LIST_INIT(&dp->ips_collection_exclude);
 	LIST_INIT(&dp->pf_tcp);
 	LIST_INIT(&dp->pf_udp);
+	LIST_INIT(&dp->icf);
+	LIST_INIT(&dp->ipf);
 	LIST_INIT(&dp->lua_desync);
 #ifdef HAS_FILTER_SSID
 	LIST_INIT(&dp->filter_ssid);
@@ -368,6 +370,8 @@ static void dp_clear_dynamic(struct desync_profile *dp)
 	ipset_collection_destroy(&dp->ips_collection_exclude);
 	port_filters_destroy(&dp->pf_tcp);
 	port_filters_destroy(&dp->pf_udp);
+	icmp_filters_destroy(&dp->icf);
+	ipp_filters_destroy(&dp->ipf);
 	funclist_destroy(&dp->lua_desync);
 #ifdef HAS_FILTER_SSID
 	strlist_destroy(&dp->filter_ssid);
@@ -475,11 +479,30 @@ void cleanup_windivert_portfilters(struct params_s *params)
 {
 	char **wdbufs[] =
 		{&params->wf_pf_tcp_src_in, &params->wf_pf_tcp_dst_in, &params->wf_pf_udp_src_in, &params->wf_pf_udp_dst_in,
-		&params->wf_pf_tcp_src_out, &params->wf_pf_tcp_dst_out, &params->wf_pf_udp_src_out, &params->wf_pf_udp_dst_out};
+		&params->wf_pf_tcp_src_out, &params->wf_pf_tcp_dst_out, &params->wf_pf_udp_src_out, &params->wf_pf_udp_dst_out,
+		&params->wf_icf_in, &params->wf_icf_out,
+		&params->wf_ipf_in, &params->wf_ipf_out};
 	for (int i=0 ; i<(sizeof(wdbufs)/sizeof(*wdbufs)) ; i++)
 	{
-		free(*wdbufs[i]); *wdbufs[i] = NULL;
+		free(*wdbufs[i]);
+		*wdbufs[i] = NULL;
 	}
+	strlist_destroy(&params->wf_raw_part);
+}
+bool alloc_windivert_portfilters(struct params_s *params)
+{
+	char **wdbufs[] =
+		{&params->wf_pf_tcp_src_in, &params->wf_pf_tcp_dst_in, &params->wf_pf_udp_src_in, &params->wf_pf_udp_dst_in,
+		&params->wf_pf_tcp_src_out, &params->wf_pf_tcp_dst_out, &params->wf_pf_udp_src_out, &params->wf_pf_udp_dst_out,
+		&params->wf_icf_in, &params->wf_icf_out,
+		&params->wf_ipf_in, &params->wf_ipf_out};
+	for (int i=0 ; i<(sizeof(wdbufs)/sizeof(*wdbufs)) ; i++)
+	{
+		if (!(*wdbufs[i] = malloc(WINDIVERT_PORTFILTER_MAX)))
+			return false;
+		**wdbufs[i] = 0;
+	}
+	return true;
 }
 #endif
 void cleanup_params(struct params_s *params)
@@ -514,6 +537,7 @@ void init_params(struct params_s *params)
 {
 	memset(params, 0, sizeof(*params));
 
+	params->intercept = true;
 #ifdef __linux__
 	params->qnum = -1;
 #elif defined(BSD)

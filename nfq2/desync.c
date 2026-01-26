@@ -132,11 +132,79 @@ static void TLSDebug(const uint8_t *tls, size_t sz)
 	TLSDebugHandshake(tls + 5, sz - 5);
 }
 
+static void packet_debug(bool replay, const struct dissect *dis)
+{
+	if (params.debug)
+	{
+		if (replay) DLOG("REPLAY ");
+		if (dis->ip)
+		{
+			char s[66];
+			str_ip(s, sizeof(s), dis->ip);
+			DLOG("IP4: %s", s);
+		}
+		else if (dis->ip6)
+		{
+			char s[128];
+			str_ip6hdr(s, sizeof(s), dis->ip6, dis->proto);
+			DLOG("IP6: %s", s);
+		}
 
+		if (dis->tcp)
+		{
+			char s[80];
+			str_tcphdr(s, sizeof(s), dis->tcp);
+			DLOG(" %s\n", s);
+			if (dis->len_payload)
+			{
+				DLOG("TCP: len=%zu : ", dis->len_payload);
+				hexdump_limited_dlog(dis->data_payload, dis->len_payload, PKTDATA_MAXDUMP);
+				DLOG("\n");
+			}
+		}
+		else if (dis->udp)
+		{
+			char s[30];
+			str_udphdr(s, sizeof(s), dis->udp);
+			DLOG(" %s\n", s);
+			if (dis->len_payload)
+			{
+				DLOG("UDP: len=%zu : ", dis->len_payload);
+				hexdump_limited_dlog(dis->data_payload, dis->len_payload, PKTDATA_MAXDUMP);
+				DLOG("\n");
+			}
+		}
+		else if (dis->icmp)
+		{
+			char s[72];
+			str_icmphdr(s, sizeof(s), !!dis->ip6, dis->icmp);
+			DLOG(" %s\nICMP: len=%zu : ", s, dis->len_payload);
+			hexdump_limited_dlog(dis->data_payload, dis->len_payload, PKTDATA_MAXDUMP);
+			DLOG("\n");
+		}
+		else
+		{
+			if (dis->len_payload)
+			{
+				char s_proto[16];
+				str_proto_name(s_proto,sizeof(s_proto),dis->proto);
+				DLOG("\nIP PROTO %s: len=%zu : ", s_proto, dis->len_payload);
+				hexdump_limited_dlog(dis->data_payload, dis->len_payload, PKTDATA_MAXDUMP);
+				DLOG("\n");
+			}
+			else
+				DLOG("\n");
+		}
+	}
+}
+
+// ipr,ipr6 - reverse ip - ip of the other side of communication
 static bool dp_match(
 	struct desync_profile *dp,
 	uint8_t l3proto,
-	const struct in_addr *ip, const struct in6_addr *ip6, uint16_t port,
+	const struct in_addr *ip, const struct in6_addr *ip6,
+	const struct in_addr *ipr, const struct in6_addr *ipr6,
+	uint16_t port, uint8_t icmp_type, uint8_t icmp_code,
 	const char *hostname, bool bNoSubdom, t_l7proto l7proto, const char *ssid,
 	bool *bCheckDone, bool *bCheckResult, bool *bExcluded)
 {
@@ -150,8 +218,23 @@ static bool dp_match(
 		// L3 filter does not match
 		return false;
 
-	if ((l3proto == IPPROTO_TCP && !port_filters_in_range(&dp->pf_tcp, port)) || (l3proto == IPPROTO_UDP && !port_filters_in_range(&dp->pf_udp, port)))
-		// L4 filter does not match
+	switch(l3proto)
+	{
+		case IPPROTO_TCP:
+			if (!port_filters_match(&dp->pf_tcp, port)) return false;
+			break;
+		case IPPROTO_UDP:
+			if (!port_filters_match(&dp->pf_udp, port)) return false;
+			break;
+		case IPPROTO_ICMP:
+			if (!icmp_filters_match(&dp->icf, icmp_type, icmp_code)) return false;
+			break;
+		default:
+			if (!ipp_filters_match(&dp->ipf, l3proto)) return false;
+	}
+		
+	if (l3proto == IPPROTO_ICMP && !icmp_filters_match(&dp->icf, icmp_type, icmp_code))
+		// icmp filter does not match
 		return false;
 
 	if (!l7_proto_match(l7proto, dp->filter_l7))
@@ -166,7 +249,7 @@ static bool dp_match(
 	if (!dp->hostlist_auto && !hostname && !bHostlistsEmpty)
 		// avoid cpu consuming ipset check. profile cannot win if regular hostlists are present without auto hostlist and hostname is unknown.
 		return false;
-	if (!IpsetCheck(dp, ip, ip6))
+	if (!IpsetCheck(dp, ip, ip6, ipr, ipr6))
 		// target ip does not match
 		return false;
 
@@ -197,7 +280,9 @@ static bool dp_match(
 static struct desync_profile *dp_find(
 	struct desync_profile_list_head *head,
 	uint8_t l3proto,
-	const struct in_addr *ip, const struct in6_addr *ip6, uint16_t port,
+	const struct in_addr *ip, const struct in6_addr *ip6,
+	const struct in_addr *ipr, const struct in6_addr *ipr6,
+	uint16_t port, uint8_t icmp_type, uint8_t icmp_code,
 	const char *hostname, bool bNoSubdom, t_l7proto l7proto, const char *ssid,
 	bool *bCheckDone, bool *bCheckResult, bool *bExcluded)
 {
@@ -206,12 +291,21 @@ static struct desync_profile *dp_find(
 	{
 		char s[40];
 		ntopa46(ip, ip6, s, sizeof(s));
-		DLOG("desync profile search for %s ip=%s port=%u l7proto=%s ssid='%s' hostname='%s'\n", proto_name(l3proto), s, port, l7proto_str(l7proto), ssid ? ssid : "", hostname ? hostname : "");
+		if (ipr || ipr6)
+		{
+			char sr[40];
+			ntopa46(ipr, ipr6, sr, sizeof(sr));
+			DLOG("desync profile search for %s ip1=%s ip2=%s port=%u icmp=%u:%u l7proto=%s ssid='%s' hostname='%s'\n",
+				proto_name(l3proto), s, sr, port, icmp_type, icmp_code, l7proto_str(l7proto), ssid ? ssid : "", hostname ? hostname : "");
+		}
+		else
+			DLOG("desync profile search for %s ip=%s port=%u icmp=%u:%u l7proto=%s ssid='%s' hostname='%s'\n",
+				proto_name(l3proto), s, port, icmp_type, icmp_code, l7proto_str(l7proto), ssid ? ssid : "", hostname ? hostname : "");
 	}
 	if (bCheckDone) *bCheckDone = false;
 	LIST_FOREACH(dpl, head, next)
 	{
-		if (dp_match(&dpl->dp, l3proto, ip, ip6, port, hostname, bNoSubdom, l7proto, ssid, bCheckDone, bCheckResult, bExcluded))
+		if (dp_match(&dpl->dp, l3proto, ip, ip6, ipr, ipr6, port, icmp_type, icmp_code, hostname, bNoSubdom, l7proto, ssid, bCheckDone, bCheckResult, bExcluded))
 		{
 			DLOG("desync profile %u (%s) matches\n", dpl->dp.n, PROFILE_NAME(&dpl->dp));
 			return &dpl->dp;
@@ -455,8 +549,8 @@ static bool reasm_start(t_ctrack *ctrack, t_reassemble *reasm, uint8_t proto, ui
 static bool reasm_client_start(t_ctrack *ctrack, uint8_t proto, size_t sz, size_t szMax, const uint8_t *data_payload, size_t len_payload)
 {
 	if (!ctrack) return false;
-	// if winsize_calc==0 it means we dont know server window size - no incoming packets redirected ?
-	if (proto==IPPROTO_TCP && ctrack->pos.server.winsize_calc && (ctrack->pos.server.winsize_calc < sz))
+	// if pcounter==0 it means we dont know server window size - no incoming packets redirected ?
+	if (proto==IPPROTO_TCP && ctrack->pos.server.pcounter && (ctrack->pos.server.winsize_calc < sz))
 	{
 		// this is rare but possible situation
 		// server gave us too small tcp window
@@ -640,6 +734,12 @@ static bool ipcache_get_hostname(const struct in_addr *a4, const struct in6_addr
 		*hostname = 0;
 		return true;
 	}
+	if (params.debug)
+	{
+		char s[40];
+		ntopa46(a4, a6, s, sizeof(s));
+		DLOG("ipcache hostname search for %s\n", s);
+	}
 	ip_cache_item *ipc = ipcacheTouch(&params.ipcache, a4, a6, NULL);
 	if (!ipc)
 	{
@@ -648,7 +748,12 @@ static bool ipcache_get_hostname(const struct in_addr *a4, const struct in6_addr
 	}
 	if (ipc->hostname)
 	{
-		DLOG("got cached hostname (is_ip=%u): %s\n", ipc->hostname_is_ip, ipc->hostname);
+		if (params.debug)
+		{
+			char s[40];
+			ntopa46(a4, a6, s, sizeof(s));
+			DLOG("got cached hostname for %s : %s (is_ip=%u)\n", s, ipc->hostname, ipc->hostname_is_ip);
+		}
 		snprintf(hostname, hostname_buf_len, "%s", ipc->hostname);
 		if (hostname_is_ip) *hostname_is_ip = ipc->hostname_is_ip;
 	}
@@ -968,7 +1073,7 @@ static uint8_t desync(
 			}
 			else
 			{
-				b = lua_reconstruct_dissect(params.L, -1, mod_pkt, len_mod_pkt, false, false);
+				b = lua_reconstruct_dissect(params.L, -1, mod_pkt, len_mod_pkt, false, false, false);
 				lua_pop(params.L, 2);
 				if (!b)
 				{
@@ -1116,7 +1221,7 @@ static bool play_prolog(
 			DLOG("using cached desync profile %u (%s)\n", ps->dp->n, PROFILE_NAME(ps->dp));
 		else if (!ps->ctrack_replay->dp_search_complete)
 		{
-			ps->dp = ps->ctrack_replay->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, ps->sdport, ps->ctrack_replay->hostname, ps->ctrack_replay->hostname_is_ip, ps->l7proto, ps->ssid, NULL, NULL, NULL);
+			ps->dp = ps->ctrack_replay->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF, ps->ctrack_replay->hostname, ps->ctrack_replay->hostname_is_ip, ps->l7proto, ps->ssid, NULL, NULL, NULL);
 			ps->ctrack_replay->dp_search_complete = true;
 		}
 		if (!ps->dp)
@@ -1164,7 +1269,7 @@ static bool play_prolog(
 							DLOG_ERR("strdup(host): out of memory\n");
 				}
 			}
-			ps->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, ps->sdport, hostname, hostname_is_ip, ps->l7proto, ps->ssid, NULL, NULL, NULL);
+			ps->dp = dp_find(&params.desync_profiles, dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF, hostname, hostname_is_ip, ps->l7proto, ps->ssid, NULL, NULL, NULL);
 			if (ps->ctrack)
 			{
 				ps->ctrack->dp = ps->dp;
@@ -1249,7 +1354,7 @@ static bool dp_rediscovery(struct play_state *ps)
 	{
 		struct desync_profile *dp_prev = ps->dp;
 		// search for desync profile again. it may have changed.
-		ps->dp = dp_find(&params.desync_profiles, ps->dis->proto, ps->sdip4, ps->sdip6, ps->sdport,
+		ps->dp = dp_find(&params.desync_profiles, ps->dis->proto, ps->sdip4, ps->sdip6, NULL, NULL, ps->sdport, 0xFF, 0xFF,
 			ps->ctrack_replay ? ps->ctrack_replay->hostname : ps->bHaveHost ? ps->host : NULL,
 			ps->ctrack_replay ? ps->ctrack_replay->hostname_is_ip : bHostIsIp,
 			ps->l7proto, ps->ssid,
@@ -1782,41 +1887,200 @@ pass_reasm_cancel:
 	goto pass;
 }
 
-
-static void packet_debug(bool replay, const struct dissect *dis)
+// conntrack is supported only for RELATED icmp
+// ip matched in both directions if conntrack is unavailable
+static uint8_t dpi_desync_icmp_packet(
+	uint32_t fwmark,
+	const char *ifin, const char *ifout,
+	const struct dissect *dis,
+	uint8_t *mod_pkt, size_t *len_mod_pkt)
 {
-	if (params.debug)
+	uint8_t verdict = VERDICT_PASS;
+
+	// additional safety check
+	if (!!dis->ip == !!dis->ip6) return verdict;
+
+	const uint8_t *pkt_attached;
+	size_t len_attached;
+	const char *ifname;
+	struct sockaddr_storage src, dst;
+	const char *ssid = NULL;
+	struct desync_profile *dp = NULL;
+	t_l7payload l7payload = L7P_UNKNOWN;
+	t_ctrack *ctrack = NULL;
+	bool bReverse, bReverseFixed;
+
+	extract_endpoints(dis->ip, dis->ip6, NULL, NULL, &src, &dst);
+
+	switch(dis->icmp->icmp_type)
 	{
-		if (replay) DLOG("REPLAY ");
-		if (dis->ip)
-		{
-			char s[66];
-			str_ip(s, sizeof(s), dis->ip);
-			DLOG("IP4: %s", s);
-		}
-		else if (dis->ip6)
-		{
-			char s[128];
-			str_ip6hdr(s, sizeof(s), dis->ip6, dis->proto);
-			DLOG("IP6: %s", s);
-		}
-		if (dis->tcp)
-		{
-			char s[80];
-			str_tcphdr(s, sizeof(s), dis->tcp);
-			DLOG(" %s\n", s);
-			if (dis->len_payload) { DLOG("TCP: len=%zu : ", dis->len_payload); hexdump_limited_dlog(dis->data_payload, dis->len_payload, PKTDATA_MAXDUMP); DLOG("\n"); }
-		}
-		else if (dis->udp)
-		{
-			char s[30];
-			str_udphdr(s, sizeof(s), dis->udp);
-			DLOG(" %s\n", s);
-			if (dis->len_payload) { DLOG("UDP: len=%zu : ", dis->len_payload); hexdump_limited_dlog(dis->data_payload, dis->len_payload, PKTDATA_MAXDUMP); DLOG("\n"); }
-		}
-		else
-			DLOG("\n");
+		case ICMP_DEST_UNREACH:
+		case ICMP_TIME_EXCEEDED:
+		case ICMP_PARAMETERPROB:
+		case ICMP_REDIRECT:
+		case ICMP6_DST_UNREACH:
+		//case ICMP6_TIME_EXCEEDED: // same as ICMP_TIME_EXCEEDED = 3
+		case ICMP6_PACKET_TOO_BIG:
+		case ICMP6_PARAM_PROB:
+			pkt_attached = dis->data_payload;
+			break;
+		default:
+			pkt_attached = NULL;
 	}
+	if (pkt_attached)
+	{
+		struct dissect adis;
+
+		len_attached = pkt_attached - dis->data_payload + dis->len_payload;
+		proto_dissect_l3l4(pkt_attached, len_attached, &adis, true); // dissect without payload length checks - can be partial
+		if (!dis->ip && !dis->ip6)
+			DLOG("attached packet is invalid\n");
+		else
+		{
+			l7payload = dis->ip ? L7P_IPV4 : L7P_IPV6;
+			DLOG("attached packet\n");
+			packet_debug(false, &adis);
+			if (ConntrackPoolDoubleSearch(&params.conntrack, &adis, &ctrack, &bReverse))
+			{
+				// invert direction. they are answering to this packet
+				bReverse = !bReverse;
+				DLOG("found conntrack entry. inverted reverse=%u\n",bReverse);
+				if (ctrack->dp_search_complete)
+				{
+					// RELATED icmp processed within base connection profile
+					dp = ctrack->dp;
+					DLOG("using desync profile %u (%s) from conntrack entry\n", dp->n, PROFILE_NAME(dp));
+				}
+			}
+			else
+				DLOG("conntrack entry not found\n");
+		}
+	}
+
+	bReverseFixed = ctrack ? (bReverse ^ params.server) : (bReverse = ifin && *ifin && (!ifout || !*ifout));
+
+#ifdef HAS_FILTER_SSID
+	ifname = bReverse ? ifin : ifout;
+	if ((ssid = wlan_ssid_search_ifname(ifname)))
+		DLOG("found ssid for %s : %s\n", ifname, ssid);
+	else if (!ctrack)
+	{
+		// we dont know direction for sure
+		// search opposite interface
+		ifname = bReverse ? ifout : ifin;
+		if ((ssid = wlan_ssid_search_ifname(ifname)))
+			DLOG("found ssid for %s : %s\n", ifname, ssid);
+	}
+#endif
+	if (!dp)
+	{
+		bool hostname_is_ip = false;
+		char host[256];
+		const char *hostname = NULL;
+		if (ctrack && ctrack->hostname)
+		{
+printf("ZZZZZz4 %p\n",ctrack->hostname);
+			hostname = ctrack->hostname;
+			hostname_is_ip = ctrack->hostname_is_ip;
+		}
+		else if (ipcache_get_hostname(dis->ip ? &dis->ip->ip_dst : NULL, dis->ip6 ? &dis->ip6->ip6_dst : NULL, host, sizeof(host), &hostname_is_ip) && *host ||
+			ipcache_get_hostname(dis->ip ? &dis->ip->ip_src : NULL, dis->ip6 ? &dis->ip6->ip6_src : NULL, host, sizeof(host), &hostname_is_ip) && *host)
+		{
+			hostname = host;
+		}
+
+		dp = dp_find(
+			&params.desync_profiles,
+			dis->proto,
+			dis->ip ? &dis->ip->ip_dst : NULL, dis->ip6 ? &dis->ip6->ip6_dst : NULL,
+			dis->ip ? &dis->ip->ip_src : NULL, dis->ip6 ? &dis->ip6->ip6_src : NULL,
+			0, dis->icmp->icmp_type, dis->icmp->icmp_code,
+			hostname, hostname_is_ip,
+			L7_UNKNOWN, ssid, NULL, NULL, NULL);
+		if (!dp)
+		{
+			DLOG("matching desync profile not found\n");
+			return verdict;
+		}
+	}
+
+	const struct in_addr *sdip4;
+	const struct in6_addr *sdip6;
+	sdip6 = dis->ip6 ? bReverseFixed ? &dis->ip6->ip6_src : &dis->ip6->ip6_dst : NULL;
+	sdip4 = dis->ip ? bReverseFixed ? &dis->ip->ip_src : &dis->ip->ip_dst : NULL;
+
+	verdict = desync(
+		dp, fwmark, ifin, ifout, bReverseFixed, ctrack, NULL, l7payload, L7_UNKNOWN,
+		dis, sdip4, sdip6, 0, mod_pkt, len_mod_pkt, 0, 0, 0, NULL, 0, NULL, 0);
+
+	return verdict;
+}
+
+// undissected l4+
+// conntrack is unsupported
+// ip matched in both directions
+static uint8_t dpi_desync_ip_packet(
+	uint32_t fwmark,
+	const char *ifin, const char *ifout,
+	const struct dissect *dis,
+	uint8_t *mod_pkt, size_t *len_mod_pkt)
+{
+	uint8_t verdict = VERDICT_PASS;
+
+	// additional safety check
+	if (!!dis->ip == !!dis->ip6) return verdict;
+
+	struct sockaddr_storage src, dst;
+	const char *ssid;
+	struct desync_profile *dp;
+
+	extract_endpoints(dis->ip, dis->ip6, NULL, NULL, &src, &dst);
+#ifdef HAS_FILTER_SSID
+	if ((ssid = wlan_ssid_search_ifname(ifin)))
+		DLOG("found ssid for %s : %s\n", ifin, ssid);
+	else
+	{
+		// we dont know direction for sure
+		// search opposite interface
+		if ((ssid = wlan_ssid_search_ifname(ifout)))
+			DLOG("found ssid for %s : %s\n", ifout, ssid);
+	}
+#endif
+
+	bool hostname_is_ip = false;
+	const char *hostname = NULL;
+	char host[256];
+	if (ipcache_get_hostname(dis->ip ? &dis->ip->ip_dst : NULL, dis->ip6 ? &dis->ip6->ip6_dst : NULL, host, sizeof(host), &hostname_is_ip) && *host ||
+		ipcache_get_hostname(dis->ip ? &dis->ip->ip_src : NULL, dis->ip6 ? &dis->ip6->ip6_src : NULL, host, sizeof(host), &hostname_is_ip) && *host)
+	{
+		hostname = host;
+	}
+	dp = dp_find(
+		&params.desync_profiles,
+		dis->proto,
+		dis->ip ? &dis->ip->ip_dst : NULL, dis->ip6 ? &dis->ip6->ip6_dst : NULL,
+		dis->ip ? &dis->ip->ip_src : NULL, dis->ip6 ? &dis->ip6->ip6_src : NULL,
+		0, 0xFF, 0xFF,
+		hostname, hostname_is_ip,
+		L7_UNKNOWN, ssid, NULL, NULL, NULL);
+	if (!dp)
+	{
+		DLOG("matching desync profile not found\n");
+		return verdict;
+	}
+
+	bool bReverse = ifin && *ifin && (!ifout || !*ifout);
+
+	const struct in_addr *sdip4;
+	const struct in6_addr *sdip6;
+	sdip6 = dis->ip6 ? bReverse ? &dis->ip6->ip6_src : &dis->ip6->ip6_dst : NULL;
+	sdip4 = dis->ip ? bReverse ? &dis->ip->ip_src : &dis->ip->ip_dst : NULL;
+
+	verdict = desync(
+		dp, fwmark, ifin, ifout, bReverse, NULL, NULL, L7P_UNKNOWN, L7_UNKNOWN,
+		dis, sdip4, sdip6, 0, mod_pkt, len_mod_pkt, 0, 0, 0, NULL, 0, NULL, 0);
+
+	return verdict;
 }
 
 
@@ -1831,19 +2095,19 @@ static uint8_t dpi_desync_packet_play(
 
 	// NOTE ! OS can pass wrong checksum to queue. cannot rely on it !
 
-	proto_dissect_l3l4(data_pkt, len_pkt, &dis);
+	proto_dissect_l3l4(data_pkt, len_pkt, &dis, false);
 	if (!!dis.ip != !!dis.ip6)
 	{
 		packet_debug(!!replay_piece_count, &dis);
+		// fix csum if unmodified and if OS can pass wrong csum to queue (depends on OS)
+		// modified means we have already fixed the checksum or made it invalid intentionally
+		// this is the only point we VIOLATE const to fix the checksum in the original buffer to avoid copying to mod_pkt
 		switch (dis.proto)
 		{
 		case IPPROTO_TCP:
 			if (dis.tcp)
 			{
 				verdict = dpi_desync_tcp_packet_play(replay_piece, replay_piece_count, reasm_offset, fwmark, ifin, ifout, tpos, &dis, mod_pkt, len_mod_pkt);
-				// fix csum if unmodified and if OS can pass wrong csum to queue (depends on OS)
-				// modified means we have already fixed the checksum or made it invalid intentionally
-				// this is the only point we VIOLATE const to fix the checksum in the original buffer to avoid copying to mod_pkt
 				verdict_tcp_csum_fix(verdict, (struct tcphdr *)dis.tcp, dis.transport_len, dis.ip, dis.ip6);
 			}
 			break;
@@ -1851,12 +2115,19 @@ static uint8_t dpi_desync_packet_play(
 			if (dis.udp)
 			{
 				verdict = dpi_desync_udp_packet_play(replay_piece, replay_piece_count, reasm_offset, fwmark, ifin, ifout, tpos, &dis, mod_pkt, len_mod_pkt);
-				// fix csum if unmodified and if OS can pass wrong csum to queue (depends on OS)
-				// modified means we have already fixed the checksum or made it invalid intentionally
-				// this is the only point we VIOLATE const to fix the checksum in the original buffer to avoid copying to mod_pkt
 				verdict_udp_csum_fix(verdict, (struct udphdr *)dis.udp, dis.transport_len, dis.ip, dis.ip6);
 			}
 			break;
+		case IPPROTO_ICMP:
+		case IPPROTO_ICMPV6:
+			if (dis.icmp)
+			{
+				verdict = dpi_desync_icmp_packet(fwmark, ifin, ifout, &dis, mod_pkt, len_mod_pkt);
+				verdict_icmp_csum_fix(verdict, (struct icmp46 *)dis.icmp, dis.transport_len, dis.ip6);
+			}
+			break;
+		default:
+			verdict = dpi_desync_ip_packet(fwmark, ifin, ifout, &dis, mod_pkt, len_mod_pkt);
 		}
 	}
 	return verdict;

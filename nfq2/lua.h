@@ -42,8 +42,8 @@
 
 void desync_instance(const char *func, unsigned int dp_n, unsigned int func_n, char *instance, size_t inst_size);
 
-
 bool lua_test_init_script_files(void);
+void lua_req_quit(void);
 bool lua_init(void);
 void lua_shutdown(void);
 void lua_dlog_error(void);
@@ -53,6 +53,9 @@ void lua_do_gc(void);
 int lua_absindex(lua_State *L, int idx);
 #define lua_rawlen lua_objlen
 #endif
+
+const char *lua_reqlstring(lua_State *L,int idx,size_t *len);
+const char *lua_reqstring(lua_State *L,int idx);
 
 // push - create object and push to the stack
 // pushf - create object and set it as a named field of a table already present on the stack
@@ -82,10 +85,19 @@ void lua_pushi_table(lua_State *L, lua_Integer idx);
 void lua_push_blob(lua_State *L, int idx_desync, const char *blob);
 void lua_pushf_blob(lua_State *L, int idx_desync, const char *field, const char *blob);
 
+void lua_push_ipaddr(lua_State *L, const struct sockaddr *sa);
+void lua_pushf_ipaddr(lua_State *L, const char *field, const struct sockaddr *sa);
+void lua_pushi_ipaddr(lua_State *L, lua_Integer idx, const struct sockaddr *sa);
+void lua_pushi_str(lua_State *L, lua_Integer idx, const char *str);
 void lua_pushf_tcphdr_options(lua_State *L, const struct tcphdr *tcp, size_t len);
+void lua_push_tcphdr(lua_State *L, const struct tcphdr *tcp, size_t len);
 void lua_pushf_tcphdr(lua_State *L, const struct tcphdr *tcp, size_t len);
+void lua_push_udphdr(lua_State *L, const struct udphdr *udp, size_t len);
 void lua_pushf_udphdr(lua_State *L, const struct udphdr *udp, size_t len);
+void lua_pushf_icmphdr(lua_State *L, const struct icmp46 *icmp, size_t len);
+void lua_push_iphdr(lua_State *L, const struct ip *ip, size_t len);
 void lua_pushf_iphdr(lua_State *L, const struct ip *ip, size_t len);
+void lua_push_ip6hdr(lua_State *L, const struct ip6_hdr *ip6, size_t len);
 void lua_pushf_ip6hdr(lua_State *L, const struct ip6_hdr *ip6, size_t len);
 void lua_push_dissect(lua_State *L, const struct dissect *dis);
 void lua_pushf_dissect(lua_State *L, const struct dissect *dis);
@@ -99,7 +111,8 @@ bool lua_reconstruct_ip6hdr(lua_State *L, int idx, struct ip6_hdr *ip6, size_t *
 bool lua_reconstruct_iphdr(lua_State *L, int idx, struct ip *ip, size_t *len);
 bool lua_reconstruct_tcphdr(lua_State *L, int idx, struct tcphdr *tcp, size_t *len);
 bool lua_reconstruct_udphdr(lua_State *L, int idx, struct udphdr *udp);
-bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, bool badsum, bool ip6_preserve_next);
+bool lua_reconstruct_icmphdr(lua_State *L, int idx, struct icmp46 *icmp);
+bool lua_reconstruct_dissect(lua_State *L, int idx, uint8_t *buf, size_t *len, bool keepsum, bool badsum, bool ip6_preserve_next);
 
 typedef struct {
 	unsigned int func_n;

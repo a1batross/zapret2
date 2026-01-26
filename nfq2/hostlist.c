@@ -42,7 +42,7 @@ bool AppendHostlistItem(hostlist_pool **hostlist, char *s)
 
 bool AppendHostList(hostlist_pool **hostlist, const char *filename)
 {
-	char *p, *e, s[256], *zbuf;
+	char *p, *e, s[4096], *zbuf;
 	size_t zsize;
 	int ct = 0;
 	FILE *F;

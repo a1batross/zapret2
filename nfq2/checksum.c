@@ -95,10 +95,7 @@ static uint16_t do_csum(const uint8_t *buff, size_t len)
 	return u16;
 }
 
-uint16_t csum_partial(const void *buff, size_t len)
-{
-	return do_csum(buff, len);
-}
+#define csum_partial(buff, len) do_csum((const uint8_t*)buff,len)
 
 uint16_t csum_tcpudp_magic(uint32_t saddr, uint32_t daddr, size_t len, uint8_t proto, uint16_t sum)
 {
@@ -107,7 +104,7 @@ uint16_t csum_tcpudp_magic(uint32_t saddr, uint32_t daddr, size_t len, uint8_t p
 
 uint16_t ip4_compute_csum(const void *buff, size_t len)
 {
-	return ~from64to16(do_csum(buff, len));
+	return ~csum_partial(buff, len);
 }
 void ip4_fix_checksum(struct ip *ip)
 {
@@ -157,4 +154,22 @@ void udp_fix_checksum(struct udphdr *udp, size_t len, const struct ip *ip, const
 		udp4_fix_checksum(udp, len, &ip->ip_src, &ip->ip_dst);
 	else if (ip6hdr)
 		udp6_fix_checksum(udp, len, &ip6hdr->ip6_src, &ip6hdr->ip6_dst);
+}
+
+void icmp4_fix_checksum(struct icmp46 *icmp, size_t len)
+{
+	icmp->icmp_cksum = 0;
+	icmp->icmp_cksum = ~csum_partial(icmp, len);
+}
+void icmp6_fix_checksum(struct icmp46 *icmp, size_t len, const struct ip6_hdr *ip6hdr)
+{
+	icmp->icmp_cksum = 0;
+	icmp->icmp_cksum = csum_ipv6_magic(&ip6hdr->ip6_src, &ip6hdr->ip6_dst, len, IPPROTO_ICMPV6, csum_partial(icmp, len));
+}
+void icmp_fix_checksum(struct icmp46 *icmp, size_t len, const struct ip6_hdr *ip6hdr)
+{
+	if (ip6hdr)
+		icmp6_fix_checksum(icmp, len, ip6hdr);
+	else
+		icmp4_fix_checksum(icmp, len);
 }

@@ -25,6 +25,11 @@
 #ifdef __CYGWIN__
 #define INITGUID
 #include "windivert/windivert.h"
+#include "netinet/icmp6.h"
+#include "netinet/ip_icmp.h"
+#else
+#include <netinet/icmp6.h>
+#include <netinet/ip_icmp.h>
 #endif
 
 #ifndef IPPROTO_DIVERT
@@ -59,6 +64,31 @@
 #define IPPROTO_SHIM6		140
 #endif
 
+#ifndef ICMP_DEST_UNREACH
+#define ICMP_DEST_UNREACH	3
+#endif
+#ifndef ICMP_TIME_EXCEEDED
+#define ICMP_TIME_EXCEEDED	11
+#endif
+#ifndef ICMP_PARAMETERPROB
+#define ICMP_PARAMETERPROB	12
+#endif
+#ifndef ICMP_TIMESTAMP
+#define ICMP_TIMESTAMP		13
+#endif
+#ifndef ICMP_TIMESTAMPREPLY
+#define ICMP_TIMESTAMPREPLY	14
+#endif
+#ifndef ICMP_INFO_REQUEST
+#define ICMP_INFO_REQUEST	15
+#endif
+#ifndef ICMP_INFO_REPLY
+#define ICMP_INFO_REPLY		16
+#endif
+#ifndef MLD_LISTENER_REDUCTION
+#define MLD_LISTENER_REDUCTION	132
+#endif
+
 // returns netorder value
 uint32_t net32_add(uint32_t netorder_value, uint32_t cpuorder_increment);
 uint32_t net16_add(uint16_t netorder_value, uint16_t cpuorder_increment);
@@ -84,6 +114,7 @@ uint8_t tcp_find_scale_factor(const struct tcphdr *tcp);
 uint16_t tcp_find_mss(const struct tcphdr *tcp);
 bool tcp_synack_segment(const struct tcphdr *tcphdr);
 bool tcp_syn_segment(const struct tcphdr *tcphdr);
+
 
 bool make_writeable_dir();
 bool ensure_file_access(const char *filename);
@@ -121,16 +152,21 @@ int socket_divert(sa_family_t family);
 #endif
 
 const char *proto_name(uint8_t proto);
+void str_proto_name(char *s, size_t s_len, uint8_t proto);
+const char *icmp_type_name(bool v6, uint8_t type);
+void str_icmp_type_name(char *s, size_t s_len, bool v6, uint8_t type);
 uint16_t family_from_proto(uint8_t l3proto);
 void print_ip(const struct ip *ip);
 void print_ip6hdr(const struct ip6_hdr *ip6hdr, uint8_t proto);
 void print_tcphdr(const struct tcphdr *tcphdr);
 void print_udphdr(const struct udphdr *udphdr);
+void print_icmphdr(const struct icmp46 *icmp, bool v6);
 void str_ip(char *s, size_t s_len, const struct ip *ip);
 void str_ip6hdr(char *s, size_t s_len, const struct ip6_hdr *ip6hdr, uint8_t proto);
 void str_srcdst_ip6(char *s, size_t s_len, const void *saddr,const void *daddr);
 void str_tcphdr(char *s, size_t s_len, const struct tcphdr *tcphdr);
 void str_udphdr(char *s, size_t s_len, const struct udphdr *udphdr);
+void str_icmphdr(char *s, size_t s_len, bool v6, const struct icmp46 *icmp);
 
 bool proto_check_ipv4(const uint8_t *data, size_t len);
 void proto_skip_ipv4(const uint8_t **data, size_t *len);
@@ -143,6 +179,9 @@ void proto_skip_tcp(const uint8_t **data, size_t *len);
 bool proto_check_udp(const uint8_t *data, size_t len);
 bool proto_check_udp_payload(const uint8_t *data, size_t len);
 void proto_skip_udp(const uint8_t **data, size_t *len);
+bool proto_check_icmp(const uint8_t *data, size_t len);
+void proto_skip_icmp(const uint8_t **data, size_t *len);
+
 struct dissect
 {
 	const uint8_t *data_pkt;
@@ -153,19 +192,24 @@ struct dissect
 	uint8_t proto;
 	const struct tcphdr *tcp;
 	const struct udphdr *udp;
+	const struct icmp46 *icmp;
 	size_t len_l4;
 	size_t transport_len;
 	const uint8_t *data_payload;
 	size_t len_payload;
 };
-void proto_dissect_l3l4(const uint8_t *data, size_t len, struct dissect *dis);
+void proto_dissect_l3l4(const uint8_t *data, size_t len, struct dissect *dis, bool no_payload_check);
 void reverse_ip(struct ip *ip, struct ip6_hdr *ip6);
 void reverse_tcp(struct tcphdr *tcp);
 
 uint8_t ttl46(const struct ip *ip, const struct ip6_hdr *ip6);
 
+bool get_source_ip4(const struct in_addr *target, struct in_addr *source);
+bool get_source_ip6(const struct in6_addr *target, struct in6_addr *source);
+
 void verdict_tcp_csum_fix(uint8_t verdict, struct tcphdr *tcphdr, size_t transport_len, const struct ip *ip, const struct ip6_hdr *ip6hdr);
 void verdict_udp_csum_fix(uint8_t verdict, struct udphdr *udphdr, size_t transport_len, const struct ip *ip, const struct ip6_hdr *ip6hdr);
+void verdict_icmp_csum_fix(uint8_t verdict, struct icmp46 *icmphdr, size_t transport_len, const struct ip6_hdr *ip6hdr);
 
 void dbgprint_socket_buffers(int fd);
 bool set_socket_buffers(int fd, int rcvbuf, int sndbuf);
