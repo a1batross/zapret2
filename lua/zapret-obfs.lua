@@ -121,7 +121,7 @@ function ippxor(ctx, desync)
 
 	local bdxor = need_dxor(desync.dis)
 	if bdxor then
-		DLOG("ippxor: dataxor out")
+		DLOG("ippxor: dataxor size="..#desync.dis.payload)
 		dxor(desync.dis)
 	end
 
@@ -143,11 +143,12 @@ function ippxor(ctx, desync)
 			DLOG_ERR("ippxor: could not rebuild packet")
 			return
 		end
-		if not bdxor and need_dxor(dis) then
-			DLOG("ippxor: dataxor in")
-			dxor(dis)
-		end
 		desync.dis = dis
+	end
+
+	if not bdxor and need_dxor(desync.dis) then
+		DLOG("ippxor: dataxor size="..#desync.dis.payload)
+		dxor(desync.dis)
 	end
 
 	return VERDICT_MODIFY + VERDICT_PRESERVE_NEXT
