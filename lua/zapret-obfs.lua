@@ -95,7 +95,7 @@ end
 -- xor ip protocol number and optionally xor tcp,udp,icmp payload with supplied blob pattern
 -- arg : ippxor - value to xor ip protocol number
 -- arg : dataxor - blob to xor tcp, udp or icmp payload
--- arg : rebuild - reconstruct desync.dis if after ippxor packet becomes tcp,udp or icmp
+-- arg : rebuild - always reconstruct desync.dis if after ippxor packet becomes tcp,udp or icmp
 function ippxor(ctx, desync)
 	local dataxor
 	local function need_dxor(dis)
@@ -127,8 +127,8 @@ function ippxor(ctx, desync)
 
 	local l3_from = ip_proto_l3(desync.dis)
 	local l3_to = bitxor(l3_from, ippxor)
-	fix_ip_proto(desync.dis, l3_to)
 	DLOG("ippxor: "..l3_from.." => "..l3_to)
+	fix_ip_proto(desync.dis, l3_to)
 
 	if	(not bdxor and dataxor or desync.arg.rebuild) and
 		(l3_to==IPPROTO_TCP and not desync.dis.tcp or
