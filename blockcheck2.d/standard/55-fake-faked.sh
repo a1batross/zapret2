@@ -105,8 +105,8 @@ pktws_check_https_tls()
 		fake=fake_default_tls
 	fi
 
-	ttls=$(seq -s ' ' $MIN_TTL $MAX_TTL)
-	attls=$(seq -s ' ' $MIN_AUTOTTL_DELTA $MAX_AUTOTTL_DELTA)
+	[ "$MAX_TTL" = 0 ] || ttls=$(seq -s ' ' $MIN_TTL $MAX_TTL)
+	[ "$MAX_AUTOTTL_DELTA" = 0 ] || attls=$(seq -s ' ' $MIN_AUTOTTL_DELTA $MAX_AUTOTTL_DELTA)
 
 	# do not test fake + fakedsplit if fakedsplit works
 	[ "$need_fakedsplit" = 0 -a "$SCANLEVEL" != force ] || splitfs=fakedsplit
