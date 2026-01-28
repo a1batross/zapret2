@@ -204,3 +204,8 @@ v0.8.1
 * nfqws2: enable dead reasm protection in wsize=0 case
 * nfqws2: --intercept
 * winws2: changed icon to multi-res png up to 256px
+* nfqws2: support icmp and ipp
+* nfqws2: VERDICT_PRESERVE_NEXT
+* nfqws2: keepsum reconstruct option
+* nfqws2: more helpers
+* zapret-obfs: ippxor, udp2icmp
