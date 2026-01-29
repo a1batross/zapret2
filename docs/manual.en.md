@@ -823,7 +823,7 @@ Any parameters applicable to profiles, including filters, are allowed within tem
 
 ### Filtering by ipsets
 
-- In case of tcp or udp server address is matched in client mode и and client address in [server](#server-mode).
+- In case of tcp or udp server address is matched in client mode и and client address in [server mode](#server-mode).
 - related icmp use cached profile from the original packet.
 - Unrelated icmp and и raw ip are matched by either source or destination ip. To match ipset any of two must match.
 
