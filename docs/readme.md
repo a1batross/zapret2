@@ -439,10 +439,10 @@ nfqws2 \
 
 Работающие пары, пробрасываемые Linux NAT :
 
-- ctype=8:stype=0 - echo request - echo reply (используется по умолчанию)
-- ctype=13:stype=14 - timestamp - timestamp reply
-- ctype=15:stype=16 - information request - information reply
-- ctype=17:stype=18 - address mask request - address mask reply
+- `ctype=8:stype=0` - echo request - echo reply (используется по умолчанию)
+- `ctype=13:stype=14` - timestamp - timestamp reply
+- `ctype=15:stype=16` - information request - information reply
+- `ctype=17:stype=18` - address mask request - address mask reply
 
 wireguard server - `1.2.3.4:5555`
 
