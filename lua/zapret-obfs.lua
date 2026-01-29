@@ -157,11 +157,11 @@ end
 
 -- test case:
 --  endpoint1:
---   nfqws2 --lua-init=@/opt/zapret2/lua/zapret-obfs.lua --in-range=a --lua-desync=udp2icmp
+--   --in-range=a --lua-desync=udp2icmp
 --   nft add rule inet ztest2 post meta mark and 0x40000000 == 0 udp dport 12345 queue num 200 bypass
 --   nft add rule inet ztest2 pre meta mark and 0x40000000 == 0 meta l4proto "{icmp,icmpv6}" queue num 200 bypass
 --  endpoint2:
---   nfqws2 --lua-init=@/opt/zapret2/lua/zapret-obfs.lua --in-range=a --lua-desync=udp2icmp --server
+--   --in-range=a --lua-desync=udp2icmp --server
 --   nft add rule inet ztest2 post meta mark and 0x40000000 == 0 udp sport 12345 queue num 200 bypass
 --   nft add rule inet ztest2 pre meta mark and 0x40000000 == 0 meta l4proto "{icmp,icmpv6}" queue num 200 bypass
 -- packs udp datagram to icmp message without changing packet size
