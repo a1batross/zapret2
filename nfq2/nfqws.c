@@ -1463,6 +1463,7 @@ static bool wf_make_filter(
 	const char *pf_udp_src_in, const char *pf_udp_dst_out,
 	const char *icf_out, const char *icf_in,
 	const char *ipf_out, const char *ipf_in,
+	const char *wf_raw_filter,
 	const struct str_list_head *wf_raw_part,
 	bool bFilterOutLAN, bool bFilterOutLoopback)
 {
@@ -1471,14 +1472,18 @@ static bool wf_make_filter(
 
 	snprintf(wf, len, "%s", DIVERT_PROLOG);
 	if (bFilterOutLoopback)
-		snprintf(wf + strlen(wf), len - strlen(wf), " and !loopback");
+		snprintf(wf + strlen(wf), len - strlen(wf), "\nand !loopback");
 	if (IfIdx)
-		snprintf(wf + strlen(wf), len - strlen(wf), " and ifIdx=%u and subIfIdx=%u", IfIdx, SubIfIdx);
+		snprintf(wf + strlen(wf), len - strlen(wf), "\nand ifIdx=%u and subIfIdx=%u", IfIdx, SubIfIdx);
 	if (ipv4 ^ ipv6)
-		snprintf(wf + strlen(wf), len - strlen(wf), " and %s", ipv4 ? "ip" : "ipv6");
+		snprintf(wf + strlen(wf), len - strlen(wf), "\nand %s", ipv4 ? "ip" : "ipv6");
 	if (bHaveTCP && !bTcpEmpty)
-		snprintf(wf + strlen(wf), len - strlen(wf), " and\n" DIVERT_TCP_NOT_EMPTY);
-	snprintf(wf + strlen(wf), len - strlen(wf), " and\n(\n false"); 
+		snprintf(wf + strlen(wf), len - strlen(wf), "\nand " DIVERT_TCP_NOT_EMPTY);
+
+	if (*wf_raw_filter)
+		snprintf(wf + strlen(wf), len - strlen(wf), "\nand\n(\n%s\n)", wf_raw_filter);
+
+	snprintf(wf + strlen(wf), len - strlen(wf), "\nand\n(\n false"); 
 
 	if (bHaveTCP)
 	{
@@ -1604,7 +1609,8 @@ static void exithelp(void)
 		" --wf-icmp-out=type[:code]\t\t\t\t; ICMP in filter. multiple comma separated values allowed.\n"
 		" --wf-ipp-in=proto\t\t\t\t\t; IP protocol in filter. multiple comma separated values allowed.\n"
 		" --wf-ipp-out=proto\t\t\t\t\t; IP protocol out filter. multiple comma separated values allowed.\n"
-		" --wf-raw-part=<filter>|@<filename>\t\t\t; partial raw windivert filter string or filename\n"
+		" --wf-raw-part=<filter>|@<filename>\t\t\t; partial raw windivert filter combined by OR. multiple allowed\n"
+		" --wf-raw-filter=<filter>|@<filename>\t\t\t; partial raw windivert filter combined by AND. only one allowed\n"
 		" --wf-filter-lan=0|1\t\t\t\t\t; add excluding filter for non-global IP (default : 1)\n"
 		" --wf-filter-loopback=0|1\t\t\t\t; add excluding filter for loopback (default : 1)\n"
 		" --wf-raw=<filter>|@<filename>\t\t\t\t; full raw windivert filter string or filename. replaces --wf-tcp,--wf-udp,--wf-raw-part\n"
@@ -1810,6 +1816,7 @@ enum opt_indices {
 	IDX_WF_IPP_OUT,
 	IDX_WF_RAW,
 	IDX_WF_RAW_PART,
+	IDX_WF_RAW_FILTER,
 	IDX_WF_FILTER_LAN,
 	IDX_WF_FILTER_LOOPBACK,
 	IDX_WF_DUP_CHECK,
@@ -1909,6 +1916,7 @@ static const struct option long_options[] = {
 	[IDX_WF_IPP_OUT] = {"wf-ipp-out", required_argument, 0, 0},
 	[IDX_WF_RAW] = {"wf-raw", required_argument, 0, 0},
 	[IDX_WF_RAW_PART] = {"wf-raw-part", required_argument, 0, 0},
+	[IDX_WF_RAW_FILTER] = {"wf-raw-filter", required_argument, 0, 0},
 	[IDX_WF_FILTER_LAN] = {"wf-filter-lan", required_argument, 0, 0},
 	[IDX_WF_FILTER_LOOPBACK] = {"wf-filter-loopback", required_argument, 0, 0},
 	[IDX_WF_SAVE] = {"wf-save", required_argument, 0, 0},
@@ -1960,7 +1968,7 @@ static void WinSetIcon(void)
 #endif
 #endif
 
-enum {WF_TCP_IN, WF_UDP_IN, WF_TCP_OUT, WF_UDP_OUT, WF_ICMP_IN, WF_ICMP_OUT, WF_IPP_IN, WF_IPP_OUT, WF_RAW, WF_RAWF_PART, GLOBAL_SSID_FILTER, GLOBAL_NLM_FILTER, WF_RAWF, WF_COUNT} t_wf_index;
+enum {WF_TCP_IN, WF_UDP_IN, WF_TCP_OUT, WF_UDP_OUT, WF_ICMP_IN, WF_ICMP_OUT, WF_IPP_IN, WF_IPP_OUT, WF_RAW, WF_RAWF_PART, WF_RAWF_FILTER, GLOBAL_SSID_FILTER, GLOBAL_NLM_FILTER, WF_RAWF, WF_COUNT} t_wf_index;
 int main(int argc, char **argv)
 {
 #ifdef __CYGWIN__
@@ -2712,7 +2720,6 @@ int main(int argc, char **argv)
 			}
 			break;
 		case IDX_WF_RAW:
-			hash_wf[WF_RAWF] = hash_jen(optarg, strlen(optarg));
 			if (optarg[0] == '@')
 			{
 				size_t sz = WINDIVERT_MAX-1;
@@ -2720,16 +2727,13 @@ int main(int argc, char **argv)
 				params.windivert_filter[sz] = 0;
 			}
 			else
-			{
 				snprintf(params.windivert_filter, WINDIVERT_MAX, "%s", optarg);
-				params.windivert_filter[WINDIVERT_MAX - 1] = '\0';
-			}
+			hash_wf[WF_RAWF] = hash_jen(params.windivert_filter, strlen(params.windivert_filter));
 			break;
 		case IDX_WF_TCP_EMPTY:
 			wf_tcp_empty = !optarg || atoi(optarg);
 			break;
 		case IDX_WF_RAW_PART:
-			hash_wf[WF_RAWF_PART] ^= hash_jen(optarg, strlen(optarg));
 			{
 				char *wfpart = malloc(WINDIVERT_MAX);
 				if (!wfpart)
@@ -2744,10 +2748,8 @@ int main(int argc, char **argv)
 					wfpart[sz] = 0;
 				}
 				else
-				{
 					snprintf(wfpart, WINDIVERT_MAX, "%s", optarg);
-					wfpart[WINDIVERT_MAX - 1] = '\0';
-				}
+				hash_wf[WF_RAWF_PART] ^= hash_jen(wfpart, strlen(wfpart));
 				if (!strlist_add(&params.wf_raw_part, wfpart))
 				{
 					free(wfpart);
@@ -2756,6 +2758,19 @@ int main(int argc, char **argv)
 				}
 				free(wfpart);
 			}
+			break;
+		case IDX_WF_RAW_FILTER:
+			hash_wf[WF_RAWF_FILTER] = hash_jen(optarg, strlen(optarg));
+			if (optarg[0] == '@')
+			{
+				size_t sz = WINDIVERT_MAX-1;
+				load_file_or_exit(optarg, params.wf_raw_filter, &sz);
+				params.wf_raw_filter[sz] = 0;
+				hash_wf[WF_RAWF] = hash_jen(params.windivert_filter, sz);
+			}
+			else
+				snprintf(params.wf_raw_filter, WINDIVERT_MAX, "%s", optarg);
+			hash_wf[WF_RAWF] = hash_jen(params.wf_raw_filter, strlen(params.wf_raw_filter));
 			break;
 		case IDX_WF_FILTER_LAN:
 			wf_filter_lan = !!atoi(optarg);
@@ -2941,6 +2956,7 @@ int main(int argc, char **argv)
 					params.wf_pf_udp_dst_in, params.wf_pf_udp_src_out,
 					params.wf_icf_out, params.wf_icf_in,
 					params.wf_ipf_out, params.wf_ipf_in,
+					params.wf_raw_filter,
 					&params.wf_raw_part, wf_filter_lan, wf_filter_loopback) :
 				wf_make_filter(params.windivert_filter, WINDIVERT_MAX, IfIdx, SubIfIdx, wf_ipv4, wf_ipv6,
 					wf_tcp_empty,
@@ -2949,6 +2965,7 @@ int main(int argc, char **argv)
 					params.wf_pf_udp_src_in, params.wf_pf_udp_dst_out,
 					params.wf_icf_out, params.wf_icf_in,
 					params.wf_ipf_out, params.wf_ipf_in,
+					params.wf_raw_filter,
 					&params.wf_raw_part, wf_filter_lan, wf_filter_loopback);
 			cleanup_windivert_portfilters(&params);
 			if (!b)

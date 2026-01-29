@@ -481,7 +481,8 @@ void cleanup_windivert_portfilters(struct params_s *params)
 		{&params->wf_pf_tcp_src_in, &params->wf_pf_tcp_dst_in, &params->wf_pf_udp_src_in, &params->wf_pf_udp_dst_in,
 		&params->wf_pf_tcp_src_out, &params->wf_pf_tcp_dst_out, &params->wf_pf_udp_src_out, &params->wf_pf_udp_dst_out,
 		&params->wf_icf_in, &params->wf_icf_out,
-		&params->wf_ipf_in, &params->wf_ipf_out};
+		&params->wf_ipf_in, &params->wf_ipf_out,
+		&params->wf_raw_filter};
 	for (int i=0 ; i<(sizeof(wdbufs)/sizeof(*wdbufs)) ; i++)
 	{
 		free(*wdbufs[i]);
@@ -502,6 +503,9 @@ bool alloc_windivert_portfilters(struct params_s *params)
 			return false;
 		**wdbufs[i] = 0;
 	}
+	if (!(params->wf_raw_filter = malloc(WINDIVERT_MAX)))
+		return false;
+	*params->wf_raw_filter = 0;
 	return true;
 }
 #endif

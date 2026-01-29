@@ -147,6 +147,7 @@ struct params_s
 	char *wf_pf_tcp_src_in, *wf_pf_tcp_dst_in, *wf_pf_udp_src_in, *wf_pf_udp_dst_in;
 	char *wf_pf_tcp_src_out, *wf_pf_tcp_dst_out, *wf_pf_udp_src_out, *wf_pf_udp_dst_out;
 	char *wf_icf_in, *wf_icf_out, *wf_ipf_in, *wf_ipf_out;
+	char *wf_raw_filter;
 #else
 	bool droproot;
 	char *user;

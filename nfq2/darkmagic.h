@@ -63,6 +63,9 @@
 #ifndef IPPROTO_SHIM6
 #define IPPROTO_SHIM6		140
 #endif
+#ifndef IPPROTO_SCTP
+#define IPPROTO_SCTP		132
+#endif
 
 #ifndef ICMP_DEST_UNREACH
 #define ICMP_DEST_UNREACH	3
