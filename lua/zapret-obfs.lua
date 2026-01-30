@@ -284,6 +284,7 @@ end
 -- arg : x2=bit - th_x2 bit used for magic=x2 - 1,2,4,8
 -- arg : kind - kind of tcp option for magic=opt
 -- arg : opt=hex - tcp option value
+-- arg : xorseq=hex - 4 hex bytes to xor seq
 function synhide(ctx, desync)
 	if not desync.dis.tcp then
 		instance_cutoff_shim(ctx, desync)
@@ -341,6 +342,16 @@ function synhide(ctx, desync)
 		opt=""
 	end
 
+
+	local xorseq
+	if desync.arg.xorseq then
+		xorseq = parse_hex(desync.arg.xorseq)
+		if not xorseq or #xorseq~=4 then
+			error("synhide: invalid xorseq value")
+		end
+		xorseq = u32(xorseq)
+	end
+
 	local function make_magic(client)
 		local m
 		-- use client seq0
@@ -352,6 +363,28 @@ function synhide(ctx, desync)
 		end
 		return m
 	end
+	local function xorhdr()
+		if xorseq then
+			desync.dis.tcp.th_ack = bitxor(desync.dis.tcp.th_ack, xorseq)
+			desync.dis.tcp.th_seq = bitxor(desync.dis.tcp.th_seq, xorseq)
+		end
+	end
+	local function ver_magic(client)
+		local r = false
+		xorhdr()
+		if magic=="tsecr" then
+			r = make_magic(client)==u16(string.sub(desync.dis.tcp.options[tsidx].data,7))
+		elseif magic=="x2" then
+			r = bitand(desync.dis.tcp.th_x2, x2)~=0
+		elseif magic=="urp" then
+			r = desync.dis.tcp.th_urp == make_magic(client)
+		elseif magic=="opt" then
+			local idx = find_tcp_option(desync.dis.tcp.options, kind)
+			r = idx and desync.dis.tcp.options[idx].data == opt
+		end
+		xorhdr()
+		return r
+	end
 	local function set_magic(client)
 		if magic=="tsecr" then
 			desync.dis.tcp.options[tsidx].data = string.sub(desync.dis.tcp.options[tsidx].data,1,6) .. bu16(make_magic(client))
@@ -362,20 +395,10 @@ function synhide(ctx, desync)
 		elseif magic=="opt" then
 			table.insert(desync.dis.tcp.options, {kind=kind, data=opt})
 		end
-	end
-	local function ver_magic(client)
-		if magic=="tsecr" then
-			return make_magic(client)==u16(string.sub(desync.dis.tcp.options[tsidx].data,7))
-		elseif magic=="x2" then
-			return bitand(desync.dis.tcp.th_x2, x2)~=0
-		elseif magic=="urp" then
-			return desync.dis.tcp.th_urp == make_magic(client)
-		elseif magic=="opt" then
-			local idx = find_tcp_option(desync.dis.tcp.options, kind)
-			return idx and desync.dis.tcp.options[idx].data == opt
-		end
+		xorhdr()
 	end
 	local function clear_magic()
+		xorhdr()
 		if magic=="tsecr" then
 			desync.dis.tcp.options[tsidx].data = string.sub(desync.dis.tcp.options[tsidx].data,1,6) .. "\x00\x00"
 		elseif magic=="x2" then
@@ -424,17 +447,22 @@ function synhide(ctx, desync)
 			return VERDICT_MODIFY
 		else
 			DLOG("synhide: server sends SYN+ACK. do not remove SYN because 'synack' arg is not set.")
+			instance_cutoff_shim(ctx, desync)
 			return -- do nothing
 		end
 	elseif fl==TH_ACK and ver_magic(true) then
 		DLOG("synhide: server received magic. restore SYN")
 		desync.dis.tcp.th_flags = bitor(bitand(desync.dis.tcp.th_flags, bitnot(TH_ACK)), TH_SYN)
 		clear_magic()
+		if not desync.arg.synack then
+			DLOG("synhide: mission complete")
+			instance_cutoff_shim(ctx, desync)
+		end
 		return VERDICT_MODIFY
 	elseif fl==(TH_ACK+TH_RST) and ver_magic(false) then
-		-- client received
 		DLOG("synhide: client received magic. restore SYN, remove RST")
 		desync.dis.tcp.th_flags = bitor(bitand(desync.dis.tcp.th_flags, bitnot(TH_RST)), TH_SYN)
+		clear_magic()
 		DLOG("synhide: mission complete")
 		instance_cutoff_shim(ctx, desync)
 		return VERDICT_MODIFY
