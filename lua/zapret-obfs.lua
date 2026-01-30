@@ -272,7 +272,7 @@ end
 --   nft add rule inet ztest pre meta mark & 0x40000000 == 0x00000000 tcp dport { 80, 443 } tcp flags & (fin | syn | rst | ack | urg) == ack tcp option 172 exists queue flags bypass to 200
 --   nft add rule inet ztest pre meta mark & 0x40000000 == 0x00000000 tcp dport { 80, 443 } tcp flags & (fin | syn | rst | ack | urg) == ack @th,100,4 != 0 queue flags bypass to 200
 --   nft add rule inet ztest pre meta mark & 0x40000000 == 0x00000000 tcp dport { 80, 443 } tcp flags & (fin | syn | rst | ack | urg) == ack ct state new queue flags bypass to 200
--- hides tcp handshake from DPI optinally using ghost SYN packed with low ttl to punch NAT hole
+-- hides tcp handshake from DPI optionally using ghost SYN packet with low ttl to punch NAT hole
 -- NOTE: linux conntrack treats packets without SYN in SYN_SENT state as INVALID ! NAT does not work !
 -- NOTE: the only found workaround - put NFQUEUE handler to that packet. It should only return pass verdict.
 -- NOTE: BSD and CGNAT should work
