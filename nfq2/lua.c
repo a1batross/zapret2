@@ -2868,7 +2868,7 @@ static int luacall_rawsend(lua_State *L)
 
 static int luacall_rawsend_dissect(lua_State *L)
 {
-	// rawsend(data, rawsend_opts, reconstruct_opts)
+	// rawsend_dissect(data, rawsend_opts, reconstruct_opts)
 	lua_check_argc_range(L,"rawsend_dissect",1,3);
 
 	LUA_STACK_GUARD_ENTER(L)
@@ -2902,7 +2902,7 @@ static int luacall_rawsend_dissect(lua_State *L)
 
 static int luacall_conntrack_feed(lua_State *L)
 {
-	// rawsend(dissect, reconstruct_opts) return track,bOutgoing
+	// conntrack_feed(dissect, reconstruct_opts) return track,bOutgoing
 	lua_check_argc_range(L,"conntrack_feed",1,3);
 
 	LUA_STACK_GUARD_ENTER(L)
@@ -2936,7 +2936,7 @@ static int luacall_conntrack_feed(lua_State *L)
 		}
 		else
 			goto err;
-	}	
+	}
 
 ex:
 	LUA_STACK_GUARD_RETURN(L,2)
