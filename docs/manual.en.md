@@ -796,13 +796,18 @@ icmp automatically assumes icmpv6 - they are processed the same they. However ic
 
 ### Profile templates
 
-When dealing with many complex and repetitive strategies, it can be convenient to use templates.
-A template is essentially a profile that is not active; instead, it is placed in a separate template list.
-A profile becomes a template by using the `--template=<name>` parameter.
-It can then be imported using `--import=<name>`. Importing copies the entire profile, not just the specified settings-all other settings are reset to their default values.
-Any existing settings in the current profile are wiped, including the name.
-Therefore, `--import` should be written at the beginning, followed by parameters unique to that profile.
-Templates can also import one another. A unique name is mandatory for a template, and since importing copies the name, you must assign a unique name using `--name` after the import.
+When there are many complex and repetitive strategies or groups of the same parameters, it may be convenient to use templates.
+A template is also a profile but it doesn't go to the working profile list but to a separate list of templates.
+The profile becomes a template by setting the `--template = <name>` parameter.
+It can then be imported (`--import = <name>`) into another profile or template.
+Simple parameters - number, string or bool - are imported only if they were specified in the imported template. When you import a template into a template in the destination template, they are also considered specified.
+List parameters are added to the end of the corresponding list. Such parameters are anything that can take a list of values. For example, hostlists or `--filter-tcp`.
+The template number and name are not copied.
+
+The `--import` directives can be anywhere. Previous simple specified parameters are overwritten by new imported or specified in the current profile parameters.
+
+A special prohibition is the replacement of autohostlist. The template may have an autohostlist, but importing somewhere that already has an autohostlist will fail.
+
 
 ```
 nfqws2 <global_parameters>
@@ -820,7 +825,7 @@ In this example, there are 3 active profiles and 3 templates, one of which impor
 - Profile **prof2** receives a combination of `<base_parameters_2>`, `<base_parameters_3>`, and `<additional_parameters_2>`.
 - Profile **prof3** receives `<parameters_3>`. It does not import any templates.
 
-Any parameters applicable to profiles, including filters, are allowed within templates.
+Any parameters applicable to profiles, including filters, are allowed within templates. Global parameters are not a part of templates or profiles.
 
 ### Filtering by ipsets
 
