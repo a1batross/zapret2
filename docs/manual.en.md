@@ -2036,7 +2036,7 @@ Those functions receive an already prepared dissect.
 #### reconstruct_dissect
 
 ```
-function reconstruct_dissect(dissect, reconstruct_opts)
+function reconstruct_dissect(dissect[, reconstruct_opts])
 ```
 
 Returns `raw_ip`. All checksums are calculated automatically. L4 checksums are intentionally corrupted if `badsum` is specified in `reconstruct_opts`.
@@ -2060,7 +2060,7 @@ function reconstruct_tcphdr(tcp)
 function reconstruct_udphdr(udp)
 function reconstruct_icmphdr(icmp)
 function reconstruct_iphdr(ip)
-function reconstruct_ip6hdr(ip6, reconstruct_opts)
+function reconstruct_ip6hdr(ip6[, reconstruct_opts])
 ```
 
 Reconstructs the corresponding raw headers from the dissect tables. Returns the raw version of the header.
@@ -2088,7 +2088,7 @@ Direct reconstruction of individual headers is rarely necessary. Typically, all 
 ### conntrack
 
 ```
-function conntrack_feed(dissect/raw_packet, reconstruct_opts)
+function conntrack_feed(dissect/raw_packet[, reconstruct_opts])
 ```
 
 "Feed" dissect or raw packet string to conntrack the way as if it was received from the network.
@@ -2149,8 +2149,8 @@ Only "addr" field is always present. Others can be absent.
 #### rawsend
 
 ```
-function rawsend(raw_data, rawsend_opts)
-function rawsend_dissect(dissect, rawsend_opts, reconstruct_opts)
+function rawsend(raw_data[, rawsend_opts])
+function rawsend_dissect(dissect[, rawsend_opts[, reconstruct_opts]])
 ```
 
 - `rawsend` works with a raw string containing a fully assembled IPv4 or IPv6 packet.

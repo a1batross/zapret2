@@ -2192,7 +2192,7 @@ function dissect(raw_ip)
 #### reconstruct_dissect
 
 ```
-function reconstruct_dissect(dissect, reconstruct_opts)
+function reconstruct_dissect(dissect[, reconstruct_opts])
 ```
 
 Возвращает raw_ip. Все чексуммы считаются автоматически. L4 чексуммы портятся, если задан badsum в reconstruct_opts.
@@ -2217,7 +2217,7 @@ function reconstruct_tcphdr(tcp)
 function reconstruct_udphdr(udp)
 function reconstruct_icmphdr(icmp)
 function reconstruct_iphdr(ip)
-function reconstruct_ip6hdr(ip6, reconstruct_opts)
+function reconstruct_ip6hdr(ip6 [,reconstruct_opts])
 ```
 
 Реконструкция соответствующих raw заголовков из таблиц диссекта. Возвращает raw вариант заголовка.
@@ -2246,7 +2246,7 @@ function csum_icmp_fix(raw_ip_header, raw_icmp_header, payload)
 ### conntrack
 
 ```
-function conntrack_feed(dissect/raw_packet, reconstruct_opts)
+function conntrack_feed(dissect/raw_packet[, reconstruct_opts])
 ```
 
 "Скормить" conntrack пакет таким образом, как если бы он пришел из сети и был проанализирован.
@@ -2307,8 +2307,8 @@ function get_ifaddrs()
 #### rawsend
 
 ```
-function rawsend(raw_data, rawsend_opts)
-function rawsend_dissect(dissect, rawsend_opts, reconstruct_opts)
+function rawsend(raw_data[, rawsend_opts])
+function rawsend_dissect(dissect[, rawsend_opts[, reconstruct_opts]])
 ```
 
 - rawsend работает с raw строкой, содержащий полностью собранный ipv4 или ipv6 пакет
