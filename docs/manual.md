@@ -2246,10 +2246,11 @@ function csum_icmp_fix(raw_ip_header, raw_icmp_header, payload)
 ### conntrack
 
 ```
-function conntrack_feed(dissect, reconstruct_opts)
+function conntrack_feed(dissect/raw_packet, reconstruct_opts)
 ```
 
 "Скормить" conntrack пакет таким образом, как если бы он пришел из сети и был проанализирован.
+Пакет может быть таблицей-диссектом или raw string. [reconstruct_opts](#standard-reconstruct) имеет смысл только для диссектов.
 Возвращается 2 значения - [track](#структура-track) и bool признак "outgoing".
 outgoing принимает значение true, если создается новая запись conntrack и она удовлетворяет признакам клиента - SYN в случае tcp, любой пакет в случае udp.
 Если запись уже существует, outgoing = true, если запись была найдена по прямой паре - src_ip, src_port, dst_ip, dst_port.
