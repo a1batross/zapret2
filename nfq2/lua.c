@@ -846,7 +846,22 @@ static int luacall_clock_gettime(lua_State *L)
 		lua_pushlint(L, ts.tv_sec);
 		lua_pushinteger(L, ts.tv_nsec);
 	}
+
 	LUA_STACK_GUARD_RETURN(L,2)
+}
+static int luacall_clock_getfloattime(lua_State *L)
+{
+	lua_check_argc(L,"clock_getfloattime", 0);
+
+	LUA_STACK_GUARD_ENTER(L)
+
+	struct timespec ts;
+	if (clock_gettime(CLOCK_REALTIME, &ts))
+		lua_pushnil(L);
+	else
+		lua_pushnumber(L, ts.tv_sec + ts.tv_nsec/1000000000.);
+
+	LUA_STACK_GUARD_RETURN(L,1)
 }
 
 static void lua_mt_init_desync_ctx(lua_State *L)
@@ -4191,6 +4206,7 @@ static void lua_init_functions(void)
 		// system functions
 		{"uname",luacall_uname},
 		{"clock_gettime",luacall_clock_gettime},
+		{"clock_getfloattime",luacall_clock_getfloattime},
 		{"getpid",luacall_getpid},
 		{"gettid",luacall_gettid},
 
