@@ -3604,11 +3604,26 @@ static int luacall_stat(lua_State *L)
 	}
 	else
 	{
-		lua_createtable(L, 0, 4);
+		lua_createtable(L, 0, 5);
 		lua_pushf_lint(L,"dev", st.st_dev);
 		lua_pushf_lint(L,"inode", st.st_ino);
 		lua_pushf_lint(L,"size", st.st_size);
 		lua_pushf_number(L,"mtime", st.st_mtim.tv_sec + st.st_mtim.tv_nsec/1000000000.);
+
+		const char *ftype;
+		switch(st.st_mode & S_IFMT)
+		{
+			case S_IFREG: ftype="file"; break;
+			case S_IFDIR: ftype="dir"; break;
+			case S_IFLNK: ftype="symlink"; break;
+			case S_IFSOCK: ftype="socket"; break;
+			case S_IFBLK: ftype="blockdev"; break;
+			case S_IFCHR: ftype="chardev"; break;
+			case S_IFIFO: ftype="fifo"; break;
+			default: ftype="unknown"; break;
+		}
+
+		lua_pushf_str(L, "type", ftype);
 	}
 	return 1;
 }
@@ -4074,7 +4089,6 @@ static void lua_init_const(void)
 		{"ICMP6_PARAMPROB_HEADER",ICMP6_PARAMPROB_HEADER},
 		{"ICMP6_PARAMPROB_NEXTHEADER",ICMP6_PARAMPROB_NEXTHEADER},
 		{"ICMP6_PARAMPROB_OPTION",ICMP6_PARAMPROB_OPTION}
-
 	};
 	DLOG("\nLUA NUMERIC:");
 	for (int i=0;i<sizeof(cuint)/sizeof(*cuint);i++)
