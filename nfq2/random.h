@@ -2,9 +2,9 @@
 
 // shim for old NDK and old gcc linux compilers
 
-#include <sys/syscall.h>
-
 #if defined(__linux__)
+
+#include <sys/syscall.h>
 
 #if defined(__ANDROID__) && __ANDROID_API__ < 28 || !defined(SYS_getrandom)
 
