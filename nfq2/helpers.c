@@ -9,6 +9,13 @@
 #include <ctype.h>
 #include <libgen.h>
 #include <errno.h>
+#include <sys/param.h>
+
+#if defined(__ANDROID__)
+#include "andr/random.h"
+#elif defined(__linux__) || defined(__CYGWIN__)
+#include <sys/random.h>
+#endif
 
 #define UNIQ_SORT \
 { \
@@ -474,12 +481,46 @@ void fill_random_az09(uint8_t *p,size_t sz)
 }
 bool fill_crypto_random_bytes(uint8_t *p,size_t sz)
 {
-	bool b;
-	FILE *F = fopen("/dev/random","rb");
-	if (!F) return false;
-	b = fread(p,sz,1,F)==1;
-	fclose(F);
-	return b;
+	ssize_t rd;
+	int fd;
+
+#if defined(__linux__) || defined(__CYGWIN__)
+	for(; sz && (rd=getrandom(p,sz,GRND_NONBLOCK))>0 ; p+=rd, sz-=rd);
+	if (sz)
+#elif defined(BSD)
+	while(sz)
+	{
+		rd = sz<256 ? sz : 256; // BSD limitation
+		if (getentropy(p,rd)) break;
+		p+=rd; sz-=rd;
+	}
+	if (sz)
+#endif
+	{
+		if ((fd = open("/dev/random",O_NONBLOCK))>=0)
+		{
+			do
+			{
+				if ((rd=read(fd,p,sz))>0)
+				{
+					p+=rd; sz-=rd;
+				}
+			} while(sz && rd>0);
+			close(fd);
+		}
+		if (sz && (fd = open("/dev/urandom",0))>=0)
+		{
+			do
+			{
+				if ((rd=read(fd,p,sz))>0)
+				{
+					p+=rd; sz-=rd;
+				}
+			} while(sz && rd>0);
+			close(fd);
+		}
+	}
+	return !sz;
 }
 
 #if defined(__GNUC__) && !defined(__llvm__)
@@ -580,4 +621,10 @@ void mask_from_bitcount6_prepare(void)
 const struct in6_addr *mask_from_bitcount6(uint32_t zct)
 {
 	return ip6_mask+zct;
+}
+
+time_t boottime(void)
+{
+	struct timespec ts;
+	return clock_gettime(CLOCK_BOOTTIME, &ts) ? 0 : ts.tv_sec;
 }

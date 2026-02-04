@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "conntrack.h"
 #include "darkmagic.h"
 #include <arpa/inet.h>
@@ -66,7 +67,7 @@ void ConntrackPoolInit(t_conntrack *p, time_t purge_interval, uint32_t timeout_s
 	p->timeout_fin = timeout_fin;
 	p->timeout_udp = timeout_udp;
 	p->t_purge_interval = purge_interval;
-	time(&p->t_last_purge);
+	p->t_last_purge = boottime();
 	p->pool = NULL;
 }
 
@@ -215,7 +216,7 @@ static void ConntrackFeedPacket(t_ctrack *t, bool bReverse, const struct dissect
 		ConntrackApplyPos(t, bReverse, dis);
 	}
 
-	clock_gettime(CLOCK_REALTIME, &t->pos.t_last);
+	clock_gettime(CLOCK_BOOTTIME, &t->pos.t_last);
 	// make sure t_start gets exactly the same value as first t_last
 	if (!t->t_start.tv_sec) t->t_start = t->pos.t_last;
 }
@@ -314,14 +315,14 @@ bool ConntrackPoolDrop(t_conntrack *p, const struct dissect *dis)
 void ConntrackPoolPurge(t_conntrack *p)
 {
 	time_t tidle;
-	struct timespec tnow;
+	time_t tnow;
 	t_conntrack_pool *t, *tmp;
 
-	if (clock_gettime(CLOCK_REALTIME, &tnow)) return;
-	if ((tnow.tv_sec - p->t_last_purge) >= p->t_purge_interval)
+	if (!(tnow=boottime())) return;
+	if ((tnow - p->t_last_purge) >= p->t_purge_interval)
 	{
 		HASH_ITER(hh, p->pool, t, tmp) {
-			tidle = tnow.tv_sec - t->track.pos.t_last.tv_sec;
+			tidle = tnow - t->track.pos.t_last.tv_sec;
 			if (t->track.b_cutoff ||
 				(t->conn.l4proto == IPPROTO_TCP && (
 				(t->track.pos.state == SYN && tidle >= p->timeout_syn) ||
@@ -333,7 +334,7 @@ void ConntrackPoolPurge(t_conntrack *p)
 				HASH_DEL(p->pool, t); ConntrackFreeElem(t);
 			}
 		}
-		p->t_last_purge = tnow.tv_sec;
+		p->t_last_purge = tnow;
 	}
 }
 
@@ -348,7 +349,7 @@ void ConntrackPoolDump(const t_conntrack *p)
 	struct timespec tnow;
 	char sa1[40], sa2[40];
 
-	if (clock_gettime(CLOCK_REALTIME, &tnow)) return;
+	if (clock_gettime(CLOCK_BOOTTIME, &tnow)) return;
 	HASH_ITER(hh, p->pool, t, tmp) {
 		taddr2str(t->conn.l3proto, &t->conn.src, sa1, sizeof(sa1));
 		taddr2str(t->conn.l3proto, &t->conn.dst, sa2, sizeof(sa2));
@@ -418,7 +419,7 @@ bool ReasmFeed(t_reassemble *reasm, uint32_t seq, const void *payload, size_t le
 	if ((reasm->size_present - neg_overlap + szcopy) > reasm->size)
 		return false; // buffer overflow
 	// in case of seq overlap new data replaces old - unix behavior
-	memcpy(reasm->packet + reasm->size_present - neg_overlap, payload + szignore, szcopy);
+	memcpy(reasm->packet + reasm->size_present - neg_overlap, (const uint8_t*)payload + szignore, szcopy);
 	if (szcopy>neg_overlap)
 	{
 		reasm->size_present += szcopy - neg_overlap;

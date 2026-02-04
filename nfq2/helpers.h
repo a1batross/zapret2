@@ -104,3 +104,5 @@ bool parse_int16(const char *p, int16_t *v);
 uint32_t mask_from_bitcount(uint32_t zct);
 void mask_from_bitcount6_prepare(void);
 const struct in6_addr *mask_from_bitcount6(uint32_t zct);
+
+time_t boottime(void);
