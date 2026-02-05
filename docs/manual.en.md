@@ -2005,7 +2005,7 @@ function timegm(tm)
 
 localtime and gmtime return dissected unixtime similar to C "struct tm". timelocal and timegm are reverse functions.
 
-| Поле     | Тип    | Описание    |
+| Field    | Type   | Description |
 | :------- | :----- | :---------- |
 | sec*     | number | second      |
 | min*     | number | minute      |
