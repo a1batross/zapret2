@@ -2019,7 +2019,7 @@ localtime and gmtime return dissected unixtime similar to C "struct tm". timeloc
 | zone     | string | time zone |
 | str      | number | formatted string: "dd.mm.yyyy hh:mi:ss"  |
 
-Fields marked with "*" are required for reverse translation.
+Fields marked with `*` are required for reverse translation.
 
 
 ### Packet handling options
