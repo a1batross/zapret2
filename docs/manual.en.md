@@ -1390,7 +1390,7 @@ All multi-byte numeric values are automatically converted from network byte orde
 | :------------ | :----- | :--------------------------------------------------------------- |
 | ip            | table  | IPv4 header                                                      |
 | ip6           | table  | IPv6 header                                                      |
-| frag_off      | number | IP fragment offset. present only if IP is fragmented.            |
+| frag_off      | number | IP fragment offset. present only in IP fragments.                |
 | tcp           | table  | TCP header                                                       |
 | udp           | table  | UDP header                                                       |
 | icmp          | table  | ICMP header                                                      |
