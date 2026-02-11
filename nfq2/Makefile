@@ -1,7 +1,7 @@
 CC ?= cc
 PKG_CONFIG ?= pkg-config
 OPTIMIZE ?= -Os
-CFLAGS += -std=gnu99 $(OPTIMIZE) -flto=auto
+CFLAGS += -std=gnu99 $(OPTIMIZE) -flto=auto -Wl,--gc-sections
 CFLAGS_LINUX = -Wno-alloc-size-larger-than
 CFLAGS_SYSTEMD = -DUSE_SYSTEMD
 CFLAGS_BSD = -Wno-address-of-packed-member

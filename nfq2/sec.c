@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <grp.h>
+#include <errno.h>
 
 #include "params.h"
 
@@ -18,7 +19,6 @@
 // __X32_SYSCALL_BIT defined in linux/unistd.h
 #include <linux/unistd.h>
 #include <syscall.h>
-#include <errno.h>
 
 /************ SECCOMP ************/
 

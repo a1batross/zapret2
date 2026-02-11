@@ -102,9 +102,8 @@ int hmacReset(HMACContext *context, enum SHAversion whichSha,
 	 */
 	if (key_len > blocksize) {
 		USHAContext tcontext;
-		if (ret=USHAReset(&tcontext, whichSha)) return ret;
-		if (ret=USHAInput(&tcontext, key, key_len)) return ret;
-		if (ret=USHAResult(&tcontext, tempkey)) return ret;
+		if ((ret=USHAReset(&tcontext, whichSha)) || (ret=USHAInput(&tcontext, key, key_len)) || (ret=USHAResult(&tcontext, tempkey)))
+			return ret;
 
 		key = tempkey;
 		key_len = hashsize;
