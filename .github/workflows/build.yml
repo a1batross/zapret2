@@ -430,7 +430,7 @@ jobs:
           wget -q https://github.com/openresty/luajit2/archive/refs/tags/v${LUAJIT_RELEASE}.tar.gz &&
           tar -xzf v${LUAJIT_RELEASE}.tar.gz &&
           rm -f v${LUAJIT_RELEASE}.tar.gz &&
-          make -C luajit2-${LUAJIT_RELEASE} BUILDMODE=static XCFLAGS=-DLUAJIT_DISABLE_FFI CFLAGS="-Os -s" &&
+          make -C luajit2-${LUAJIT_RELEASE} BUILDMODE=static XCFLAGS="-DLUAJIT_DISABLE_FFI -ffat-lto-objects" CFLAGS="-Os -s -flto=auto -ffunction-sections -fdata-sections -fvisibility=hidden" &&
           make -C luajit2-${LUAJIT_RELEASE} install
 
       - name: Build winws
