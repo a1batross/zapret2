@@ -1191,8 +1191,7 @@ bool QUICDecryptInitial(const uint8_t *data, size_t data_len, uint8_t *clean, si
 		return false;
 	}
 
-	uint64_t payload_len,token_len;
-	size_t pn_offset;
+	uint64_t payload_len,token_len,pn_offset;
 	pn_offset = 1 + 4 + 1 + data[5];
 	if (pn_offset >= data_len) return false;
 	pn_offset += 1 + data[pn_offset];
@@ -1221,17 +1220,17 @@ bool QUICDecryptInitial(const uint8_t *data, size_t data_len, uint8_t *clean, si
 
  	phton64(aesiv + sizeof(aesiv) - 8, pntoh64(aesiv + sizeof(aesiv) - 8) ^ pkn);
 
-	size_t cryptlen = payload_len - pkn_len - 16;
+	uint64_t cryptlen = payload_len - pkn_len - 16;
 	if (cryptlen > *clean_len) return false;
-	*clean_len = cryptlen;
+	*clean_len = (size_t)cryptlen;
 	const uint8_t *decrypt_begin = data + pn_offset + pkn_len;
 
 	uint8_t atag[16],header[2048];
-	size_t header_len = pn_offset + pkn_len;
+	uint64_t header_len = pn_offset + pkn_len;
 	if (header_len > sizeof(header)) return false; // not likely header will be so large
 	memcpy(header, data, header_len);
 	header[0] = packet0;
-	for(size_t i = 0; i < pkn_len; i++) header[header_len - 1 - i] = (uint8_t)(pkn >> (8 * i));
+	for(uint8_t i = 0; i < pkn_len; i++) header[header_len - 1 - i] = (uint8_t)(pkn >> (8 * i));
 
 	if (aes_gcm_crypt(AES_DECRYPT, clean, decrypt_begin, cryptlen, aeskey, sizeof(aeskey), aesiv, sizeof(aesiv), header, header_len, atag, sizeof(atag)))
 		return false;
