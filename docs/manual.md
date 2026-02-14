@@ -696,6 +696,7 @@ nfqws2 использует стандартный парсер getopt_long_only
  --comment=any_text                                     ; любой текст. игнорируется
  --intercept=0|1                                        ; разрешить перехват. 0 - нет, 1 - да. при 0 выполняются lua-init скрипты и процесс завершается, перехват не включается, очередь NFQUEUE не инициализируется
  --daemon                                               ; отключиться от консоли (демонизироваться)
+ --chdir[=path]                                         ; сменить текущую директорию. если нет path, выбирается путь исполняемого файла - EXEDIR
  --pidfile=<filename>                                   ; запись PID в файл
  --ctrack-timeouts=S:E:F[:U]                            ; таймауты conntrack для стадий tcp SYN, ESTABLISHED, FIN и для udp
  --ctrack-disable=[0|1]                                 ; 1 отключает conntrack

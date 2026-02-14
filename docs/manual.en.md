@@ -637,6 +637,7 @@ General parameters for all versions - nfqws2, dvtws2, winws2.
  --comment=any_text                                     ; any text. ignored
  --intercept=0|1                                        ; allow interception. 0 - no, 1 - yes. If 0 lua-init scripts are executed then process exits. NFQUEUE is not initialized.
  --daemon                                               ; detach from the console (daemonize)
+ --chdir[=path]                                         ; change current directory. if no path specified use the executable file directory - EXEDIR
  --pidfile=<filename>                                   ; write PID to a file
  --ctrack-timeouts=S:E:F[:U]                            ; conntrack timeouts for tcp stages (SYN, ESTABLISHED, FIN) and for udp
  --ctrack-disable=[0|1]                                 ; 1 disables conntrack
