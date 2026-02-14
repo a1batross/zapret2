@@ -2468,7 +2468,7 @@ function tls_dissect(tls, offset, partialOK)
 				-- next record
 				if not is_tls_record(tls, off + 5 + len, nil, partialOK) or tls_record_type(tls, off + 5 + len) ~= typ then
 					if not partialOK then return end
-					break
+					goto endrec
 				end
 				off = off + 5 + len
 				len = tls_record_data_len(tls, off)
@@ -2478,6 +2478,7 @@ function tls_dissect(tls, offset, partialOK)
 		-- next record
 		off = off + 5 + len
 	end
+::endrec::
 
 	if tdis.handshake then
 		for htyp, handshake in pairs(tdis.handshake) do
