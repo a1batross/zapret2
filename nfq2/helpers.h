@@ -106,6 +106,7 @@ void set_console_io_buffering(void);
 void close_std(void);
 void close_std_and_exit(int code);
 bool set_env_exedir(const char *argv0);
+bool realpath_any(const char *file, char *pabs);
 
 bool parse_int16(const char *p, int16_t *v);
 

@@ -280,13 +280,15 @@ bool HostlistCheck(const struct desync_profile *dp, const char *host, bool no_ma
 static struct hostlist_file *RegisterHostlist_(struct hostlist_files_head *hostlists, struct hostlist_collection_head *hl_collection, const char *filename)
 {
 	struct hostlist_file *hfile;
+	char pabs[PATH_MAX];
 
 	if (filename)
 	{
-		if (!(hfile=hostlist_files_search(hostlists, filename)))
-			if (!(hfile=hostlist_files_add(hostlists, filename)))
+		if (!realpath(filename,pabs)) return NULL;
+		if (!(hfile=hostlist_files_search(hostlists, pabs)))
+			if (!(hfile=hostlist_files_add(hostlists, pabs)))
 				return NULL;
-		if (!hostlist_collection_search(hl_collection, filename))
+		if (!hostlist_collection_search(hl_collection, pabs))
 			if (!hostlist_collection_add(hl_collection, hfile))
 				return NULL;
 	}

@@ -9,8 +9,14 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <libgen.h>
+#include <limits.h>
 #include <errno.h>
 #include <sys/param.h>
+
+#ifdef __CYGWIN__
+#include <sys/cygwin.h>
+#endif
+
 
 #define UNIQ_SORT \
 { \
@@ -668,6 +674,53 @@ bool set_env_exedir(const char *argv0)
 		free(s);
 	}
 	return bOK;
+}
+
+// works for existing and new files
+bool realpath_any(const char *file, char *pabs)
+{
+	bool b = true;
+	char *s1=NULL, *s2=NULL;
+	int res;
+	size_t l;
+
+#ifdef __CYGWIN__
+	l = cygwin_conv_path(CCP_WIN_A_TO_POSIX | CCP_ABSOLUTE, file, NULL, 0);
+	char *rp_file = (char*)malloc(l);
+	if (cygwin_conv_path(CCP_WIN_A_TO_POSIX | CCP_ABSOLUTE, file, rp_file, l))
+		goto err;
+#else
+#define rp_file file
+#endif
+
+	if (!realpath(rp_file,pabs))
+	{
+		char pa[PATH_MAX], *dir, *base;
+		if (!(s1 = strdup(rp_file))) goto err;
+		dir = dirname(s1);
+		if (!realpath(dir,pa))
+			goto err;
+		if (!(s2 = strdup(rp_file))) goto err;
+		base = basename(s2);
+		l = strlen(pa);
+		if (l && pa[l-1]=='/')
+			res=snprintf(pabs,PATH_MAX,"%s%s",pa, base);
+		else
+			res=snprintf(pabs,PATH_MAX,"%s/%s",pa,base);
+		b = res>0 && res<PATH_MAX;
+	}
+ex:
+#ifdef __CYGWIN__
+	free(rp_file);
+#else
+#undef rp_file
+#endif
+	free(s1);
+	free(s2);
+	return b;
+err:
+	b = false;
+	goto ex;
 }
 
 bool parse_int16(const char *p, int16_t *v)

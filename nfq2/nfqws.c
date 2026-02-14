@@ -2164,8 +2164,11 @@ int main(int argc, char **argv)
 			{
 				if (*optarg == '@')
 				{
-					strncpy(params.debug_logfile, optarg + 1, sizeof(params.debug_logfile));
-					params.debug_logfile[sizeof(params.debug_logfile) - 1] = 0;
+					if (!realpath_any(optarg+1,params.debug_logfile))
+					{
+						DLOG_ERR("bad file '%s'\n",optarg+1);
+						exit_clean(1);
+					}
 					FILE *F = fopen(params.debug_logfile, "wt");
 					if (!F)
 					{
@@ -2269,7 +2272,11 @@ int main(int argc, char **argv)
 			}
 			break;
 		case IDX_PIDFILE:
-			snprintf(params.pidfile, sizeof(params.pidfile), "%s", optarg);
+			if (!realpath_any(optarg,params.pidfile))
+			{
+				DLOG_ERR("bad file '%s'\n",optarg);
+				exit_clean(1);
+			}
 			break;
 #ifndef __CYGWIN__
 		case IDX_USER:
@@ -2373,8 +2380,11 @@ int main(int argc, char **argv)
 			params.writeable_dir_enable = true;
 			if (optarg)
 			{
-				strncpy(params.writeable_dir, optarg, sizeof(params.writeable_dir));
-				params.writeable_dir[sizeof(params.writeable_dir) - 1] = 0;
+				if (!realpath_any(optarg, params.writeable_dir))
+				{
+					DLOG_ERR("bad file '%s'\n",optarg);
+					exit_clean(1);
+				}
 			}
 			else
 				*params.writeable_dir = 0;
@@ -2385,10 +2395,22 @@ int main(int argc, char **argv)
 			break;
 
 		case IDX_LUA_INIT:
-			if (!strlist_add_tail(&params.lua_init_scripts, optarg))
 			{
-				DLOG_ERR("out of memory\n");
-				exit_clean(1);
+				char pabs[PATH_MAX+1], *p=optarg;
+				if (*p=='@')
+				{
+					if (!realpath_any(p+1,pabs+1))
+					{
+						DLOG_ERR("bad file '%s'\n",p+1);
+						exit_clean(1);
+					}
+					*(p=pabs)='@';
+				}
+				if (!strlist_add_tail(&params.lua_init_scripts, p))
+				{
+					DLOG_ERR("out of memory\n");
+					exit_clean(1);
+				}
 			}
 			break;
 		case IDX_LUA_GC:
@@ -2518,15 +2540,18 @@ int main(int argc, char **argv)
 			break;
 		case IDX_HOSTLIST_AUTO_DEBUG:
 		{
-			FILE *F = fopen(optarg, "a+t");
+			if (!realpath_any(optarg,params.hostlist_auto_debuglog))
+			{
+				DLOG_ERR("bad file '%s'\n",optarg);
+				exit_clean(1);
+			}
+			FILE *F = fopen(params.hostlist_auto_debuglog, "a+t");
 			if (!F)
 			{
 				DLOG_ERR("cannot create %s\n", optarg);
 				exit_clean(1);
 			}
 			fclose(F);
-			strncpy(params.hostlist_auto_debuglog, optarg, sizeof(params.hostlist_auto_debuglog));
-			params.hostlist_auto_debuglog[sizeof(params.hostlist_auto_debuglog) - 1] = '\0';
 		}
 		break;
 
