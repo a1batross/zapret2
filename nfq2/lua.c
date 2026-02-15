@@ -3180,6 +3180,7 @@ static int lua_get_ifaddrs(lua_State *L)
 #ifdef HAS_FILTER_SSID
 					lua_pushf_str(L, "ssid", wlan_ssid_search_ifname(ifname));
 #endif
+					memset(ifr.ifr_name,0,sizeof(ifr.ifr_name));
 					strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
 					if (sock>=0 && !ioctl(sock, SIOCGIFMTU, &ifr))
 						lua_pushf_int(L, "mtu", ifr.ifr_mtu);
@@ -3518,7 +3519,7 @@ static void z_free(voidpf opaque, voidpf address)
 static int luacall_gzip_init(lua_State *L)
 {
 	// gzip_init(windowBits, level, memlevel) return zstream
-	lua_check_argc_range(L,"gunzip_init",0,3);
+	lua_check_argc_range(L,"gzip_init",0,3);
 
 	LUA_STACK_GUARD_ENTER(L)
 

@@ -434,7 +434,7 @@ function string2hex(s)
 	return ss
 end
 function has_nonprintable(s)
-	return s:match("[^ -\\r\\n\\t]")
+	return s:match("[^ -\r\n\t]")
 end
 function make_readable(v)
 	if type(v)=="string" then

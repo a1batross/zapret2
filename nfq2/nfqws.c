@@ -183,7 +183,7 @@ static void fuzzPacketData(unsigned int count)
 			*packet = *packet ? (*packet & 1) ? 0x40 : 0x60 | (*packet & 0x0F) : (uint8_t)random();
 		}
 		modlen = random()%(sizeof(mod)+1);
-		verdict = processPacketData(&mark,random()%1 ? "ifin" : NULL,random()%1 ? "ifout" : NULL,packet,len,mod,&modlen);
+		verdict = processPacketData(&mark,(random() & 1) ? "ifin" : NULL,(random() & 1) ? "ifout" : NULL,packet,len,mod,&modlen);
 		free(packet);
 	}
 }

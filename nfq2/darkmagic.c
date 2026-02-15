@@ -504,7 +504,7 @@ uint8_t *proto_find_ip6_exthdr(struct ip6_hdr *ip6, size_t len, uint8_t proto)
 	bool fr=false;
 	uint16_t fr_off=0;
 
-	if (len<sizeof(struct ip6_hdr)) return false;
+	if (len<sizeof(struct ip6_hdr)) return NULL;
 	plen = ntohs(ip6->ip6_ctlun.ip6_un1.ip6_un1_plen);
 	last_proto = ip6->ip6_ctlun.ip6_un1.ip6_un1_nxt;
 	data = (uint8_t*)(ip6+1);
@@ -521,18 +521,18 @@ uint8_t *proto_find_ip6_exthdr(struct ip6_hdr *ip6, size_t len, uint8_t proto)
 		case IPPROTO_MH: // mobility header
 		case IPPROTO_HIP: // Host Identity Protocol Version v2
 		case IPPROTO_SHIM6:
-			if (len < 2) return false; // error
+			if (len < 2) return NULL; // error
 			hdrlen = 8 + (data[1] << 3);
 			break;
 		case IPPROTO_FRAGMENT: // fragment. length fixed to 8, hdrlen field defined as reserved
 			hdrlen = 8;
-			if (len < hdrlen) return false; // error
+			if (len < hdrlen) return NULL; // error
 			fr_off = ntohs(((struct ip6_frag*)data)->ip6f_offlg & IP6F_OFF_MASK);
 			fr = ((struct ip6_frag*)data)->ip6f_offlg & (IP6F_OFF_MASK|IP6F_MORE_FRAG);
 			break;
 		case IPPROTO_AH:
 			// special case. length in ah header is in 32-bit words minus 2
-			if (len < 2) return false; // error
+			if (len < 2) return NULL; // error
 			hdrlen = 8 + (data[1] << 2);
 			break;
 		default:
@@ -540,7 +540,7 @@ uint8_t *proto_find_ip6_exthdr(struct ip6_hdr *ip6, size_t len, uint8_t proto)
 			// exthdr was not found
 			return NULL;
 		}
-		if (len < hdrlen) return false; // error
+		if (len < hdrlen) return NULL; // error
 		last_proto = *data;
 		len -= hdrlen; data += hdrlen;
 	}
