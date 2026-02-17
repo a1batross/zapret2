@@ -1796,7 +1796,7 @@ static int rawsend_sendto_divert(sa_family_t family, int sock, const void *buf, 
 		char s[64];
 		snprintf(s,sizeof(s),"rawsend_sendto_divert: sendto (%zu)",len);
 		DLOG_PERROR(s);
-		return false;
+		return -1;
 	}
 
 	return wr;

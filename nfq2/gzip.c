@@ -77,8 +77,16 @@ int z_readfile(FILE *F, char **buf, size_t *size, size_t extra_alloc)
 
 	if (*size < bufsize)
 	{
-		// free extra space
-		if ((newbuf = realloc(*buf, *size + extra_alloc))) *buf = newbuf;
+		if (*size + extra_alloc)
+		{
+			// free extra space
+			if ((newbuf = realloc(*buf, *size + extra_alloc))) *buf = newbuf;
+		}
+		else
+		{
+			free(*buf);
+			*buf = NULL;
+		}
 	}
 
 	inflateEnd(&zs);
