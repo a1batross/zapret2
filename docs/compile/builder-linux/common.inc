@@ -89,7 +89,6 @@ buildenv()
 	export PKG_CONFIG_PATH=$STAGING_DIR/lib/pkgconfig
 	OLDPATH="$PATH"
 	export PATH="$PATH:$TOOLCHAINS/$TARGET/bin"
-	[ "$1" = i586-unknown-linux-musl ] && CFLAGS="$CFLAGS -mmmx"
 }
 buildenv_clear()
 {
