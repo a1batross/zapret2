@@ -46,9 +46,14 @@ target_has_luajit()
 	return 1
 }
 
-bsd_files()
+REQD_H_FILES="/usr/include/x86_64-linux-gnu/sys/queue.h /usr/include/sys/capability.h"
+check_h_files()
 {
-	install -Dm644 -t $STAGING_DIR/include/sys /usr/include/x86_64-linux-gnu/sys/queue.h /usr/include/sys/capability.h
+	check_file $REQD_H_FILES
+}
+install_h_files()
+{
+	install -Dm644 -t $STAGING_DIR/include/sys $REQD_H_FILES
 }
 
 buildenv()
@@ -78,6 +83,33 @@ buildenv_clear()
 	OLDPATH=
 }
 
+which()
+{
+	# on some systems 'which' command is considered deprecated and not installed by default
+	# 'command -v' replacement does not work exactly the same way. it outputs shell aliases if present
+	# $1 - executable name
+	local IFS=:
+	[ "$1" != "${1#/}" ] && [ -x "$1" ] && {
+		echo "$1"
+		return 0
+	}
+	for p in $PATH; do
+	    [ -x "$p/$1" ] && {
+		echo "$p/$1"
+		return 0
+	    }
+	done
+	return 1
+}
+exists()
+{
+	which "$1" >/dev/null 2>/dev/null
+}
+exists_dir()
+{
+	# use $1, ignore other args
+	[ -d "$1" ]
+}
 
 dir_is_not_empty()
 {
@@ -167,4 +199,65 @@ check_toolchains()
 		echo DOWNLOAD TOOLCHAINS FIRST
 		exit 1
 	}
+}
+
+check_prog()
+{
+	while [ -n "$1" ]; do
+		exists $1 || {
+			echo $1 is not available
+			echo "debian/ubuntu: apt install curl xz-utils bzip2 unzip make gcc libcap-dev pkg-config"
+			exit 10
+		}
+		shift
+	done
+}
+check_file()
+{
+	while [ -n "$1" ]; do
+		[ -f "$1" ] || {
+			echo $1 is not available
+			exit 10
+		}
+		shift
+	done
+}
+
+translate_target()
+{
+	case $1 in
+		aarch64-unknown-linux-musl)
+			ZBINTARGET=linux-arm64
+			;;
+		arm-unknown-linux-musleabi)
+			ZBINTARGET=linux-arm
+			;;
+		x86_64-unknown-linux-musl)
+			ZBINTARGET=linux-x86_64
+			;;
+		i586-unknown-linux-musl)
+			ZBINTARGET=linux-x86
+			;;
+		mips-unknown-linux-muslsf)
+			ZBINTARGET=linux-mips
+			;;
+		mipsel-unknown-linux-muslsf)
+			ZBINTARGET=linux-mipsel
+			;;
+		mips64-unknown-linux-musl)
+			ZBINTARGET=linux-mips64
+			;;
+		mips64el-unknown-linux-musl)
+			ZBINTARGET=linux-mipsel64
+			;;
+		powerpc-unknown-linux-musl)
+			ZBINTARGET=linux-ppc
+			;;
+		riscv64-unknown-linux-musl)
+			ZBINTARGET=linux-riscv64
+			;;
+		*)
+			return 1
+	esac
+	return 0
 }

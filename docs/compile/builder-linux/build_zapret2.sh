@@ -20,53 +20,16 @@ dl_zapret2()
 		}
 		rmdir "$ZBASE/$ZDIR"
 	fi
-	pushd "$ZBASE"
+	(
+	cd "$ZBASE"
 	curl -Lo /tmp/zapret2.zip "$ZURL"
 	unzip /tmp/zapret2.zip
 	rm /tmp/zapret2.zip
 	mv zapret2-${BRANCH} $ZDIR
-	popd
+	)
 }
 
-translate_target()
-{
-	case $1 in
-		aarch64-unknown-linux-musl)
-			ZBINTARGET=linux-arm64
-			;;
-		arm-unknown-linux-musleabi)
-			ZBINTARGET=linux-arm
-			;;
-		x86_64-unknown-linux-musl)
-			ZBINTARGET=linux-x86_64
-			;;
-		i586-unknown-linux-musl)
-			ZBINTARGET=linux-x86
-			;;
-		mips-unknown-linux-muslsf)
-			ZBINTARGET=linux-mips
-			;;
-		mipsel-unknown-linux-muslsf)
-			ZBINTARGET=linux-mipsel
-			;;
-		mips64-unknown-linux-musl)
-			ZBINTARGET=linux-mips64
-			;;
-		mips64el-unknown-linux-musl)
-			ZBINTARGET=linux-mipsel64
-			;;
-		powerpc-unknown-linux-musl)
-			ZBINTARGET=linux-ppc
-			;;
-		riscv64-unknown-linux-musl)
-			ZBINTARGET=linux-riscv64
-			;;
-		*)
-			return 1
-	esac
-	return 0
-}
-
+check_prog curl unzip make
 dl_zapret2
 check_toolchains
 ask_target
@@ -94,7 +57,7 @@ for t in $TGT; do
 
 	OPTIMIZE=-Oz \
 	CFLAGS="-static-libgcc -static -I$STAGING_DIR/include $CFLAGS" \
-	LDFLAGS="-L$DEPS_DIR/lib $LDFLAGS" \
+	LDFLAGS="-L$STAGING_DIR/lib $LDFLAGS" \
 	make LUA_JIT=$LJIT LUA_CFLAGS="$LCFLAGS" LUA_LIB="$LLIB"
 
 	[ -d "$ZBIN/$ZBINTARGET" ] || mkdir "$ZBIN/$ZBINTARGET"
