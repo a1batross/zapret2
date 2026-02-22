@@ -483,7 +483,7 @@ static int nfq_main(void)
 					DLOG_ERR("cannot get wlan info\n");
 #endif
 			int r = nfq_handle_packet(h, (char *)buf, (int)rd);
-			if (r) DLOG_ERR("nfq_handle_packet error %d\n", r);
+			if (r<0) DLOG_ERR("nfq_handle_packet result %d, errno %d : %s\n", r, errno, strerror(errno));
 			if (bQuit) goto quit;
 		}
 		if (errno==EINTR)
