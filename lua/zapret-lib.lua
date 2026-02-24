@@ -875,7 +875,7 @@ function apply_fooling(desync, dis, fooling_options)
 				if type(desync.track.lua_state.autottl_cache)~="table" then desync.track.lua_state.autottl_cache={} end
 				if type(desync.track.lua_state.autottl_cache[desync.func_instance])~="table" then desync.track.lua_state.autottl_cache[desync.func_instance]={} end
 				if not desync.track.lua_state.autottl_cache[desync.func_instance].autottl_found then
-					attl = parse_autottl(arg_autottl)
+					local attl = parse_autottl(arg_autottl)
 					if not attl then
 						error("apply_fooling: invalid autottl value '"..arg_autottl.."'")
 					end
