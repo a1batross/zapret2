@@ -3727,7 +3727,7 @@ static void lua_xtime(lua_State *L, struct tm *(*timefunc)(const time_t *,struct
 		lua_pushf_int(L,"isdst", t.tm_isdst);
 		lua_pushf_str(L,"zone", t.tm_zone);
 
-		char s[24];
+		char s[40];
 		snprintf(s,sizeof(s),"%02d.%02d.%04d %02d:%02d:%02d", t.tm_mday, t.tm_mon + 1, t.tm_year + 1900, t.tm_hour, t.tm_min, t.tm_sec);
 		lua_pushf_str(L,"str", s);
 	}
