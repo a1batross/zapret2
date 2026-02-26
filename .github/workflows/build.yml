@@ -88,6 +88,7 @@ jobs:
           LUAJIT_LUAVER: 5.1
           MINSIZE: -flto=auto -ffunction-sections -fdata-sections
           LDMINSIZE: -Wl,--gc-sections -flto=auto
+          PIC: -fpic
         run: |
           DEPS_DIR=$GITHUB_WORKSPACE/deps
           export CC="$TARGET-gcc"
@@ -115,7 +116,7 @@ jobs:
             wget -qO- https://www.lua.org/ftp/lua-${LUA_RELEASE}.tar.gz | tar -xz
             (
               cd lua-${LUA_RELEASE}
-              make CC=$CC AR="$AR rc" CFLAGS="$MINSIZE $CFLAGS" LDFLAGS="$LDMINSIZE $LDFLAGS" linux -j$(nproc)
+              make CC=$CC AR="$AR rc" CFLAGS="$PIC $MINSIZE $CFLAGS" LDFLAGS="$LDMINSIZE $LDFLAGS" linux -j$(nproc)
               make install INSTALL_TOP=$DEPS_DIR INSTALL_BIN=$DEPS_DIR/bin INSTALL_INC=$DEPS_DIR/include/lua${LUA_VER} INSTALL_LIB=$DEPS_DIR/lib
             )
             LJIT=0
@@ -133,7 +134,7 @@ jobs:
             esac
             (
               cd luajit2-*
-              make BUILDMODE=static XCFLAGS=-DLUAJIT_DISABLE_FFI HOST_CC="$HOSTCC" CROSS= CC="$CC" TARGET_AR="$AR rcus" TARGET_STRIP=$STRIP TARGET_CFLAGS="$MINSIZE $CFLAGS" TARGET_LDFLAGS="$LDMINSIZE $LDFLAGS" -j$(nproc)
+              make BUILDMODE=static XCFLAGS="-DLUAJIT_DISABLE_FFI $PIC" HOST_CC="$HOSTCC" CROSS= CC="$CC" TARGET_AR="$AR rcus" TARGET_STRIP=$STRIP TARGET_CFLAGS="$PIC $MINSIZE $CFLAGS" TARGET_LDFLAGS="$LDMINSIZE $LDFLAGS" -j$(nproc)
               make install PREFIX= DESTDIR=$DEPS_DIR
             )
             LJIT=1
@@ -149,7 +150,7 @@ jobs:
           for i in libmnl libnfnetlink libnetfilter_queue ; do
             (
               cd $i-*
-              CFLAGS="$MINSIZE $CFLAGS" \
+              CFLAGS="$PIC $MINSIZE $CFLAGS" \
               LDFLAGS="$LDMINSIZE $LDFLAGS" \
               ./configure --prefix= --host=$TARGET --enable-static --disable-shared --disable-dependency-tracking
               make install -j$(nproc) DESTDIR=$DEPS_DIR
@@ -162,7 +163,7 @@ jobs:
             xargs -I{} wget -qO- https://github.com/madler/zlib/archive/refs/tags/{}.tar.gz | tar -xz
           (
             cd zlib-*
-            CFLAGS="$MINSIZE $CFLAGS" \
+            CFLAGS="$PIC $MINSIZE $CFLAGS" \
             ./configure --prefix= --static
             make install -j$(nproc) DESTDIR=$DEPS_DIR
           )
@@ -320,6 +321,7 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           ARCH: ${{ matrix.arch }}
+          PIC: -fpic
           CC: ${{ matrix.target }}-freebsd11-clang
           MINSIZE: -Os -flto=auto -ffunction-sections -fdata-sections
           LDMINSIZE: -Wl,--gc-sections -flto=auto
@@ -328,7 +330,7 @@ jobs:
           wget -qO- https://github.com/openresty/luajit2/archive/refs/tags/v${LUAJIT_RELEASE}.tar.gz | tar -xz
           (
             cd luajit2-*
-            make BUILDMODE=static XCFLAGS="-fPIC -DLUAJIT_DISABLE_FFI" HOST_CC=gcc CC=$CC TARGET_CFLAGS="$MINSIZE $CFLAGS -fPIC" TARGET_LDFLAGS="$LDMINSIZE $LDFLAGS"
+            make BUILDMODE=static XCFLAGS="$PIC -DLUAJIT_DISABLE_FFI" HOST_CC=gcc CC=$CC TARGET_CFLAGS="$MINSIZE $CFLAGS $PIC" TARGET_LDFLAGS="$LDMINSIZE $LDFLAGS"
             make install PREFIX= DESTDIR=$DEPS_DIR
           )
 
