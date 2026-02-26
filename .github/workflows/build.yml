@@ -88,7 +88,8 @@ jobs:
           LUAJIT_LUAVER: 5.1
           MINSIZE: -flto=auto -ffunction-sections -fdata-sections
           LDMINSIZE: -Wl,--gc-sections -flto=auto
-          PIC: -fpic
+          #current toolchain's musl is not PIC.  will be broken by upx
+          #PIC: -fpic
         run: |
           DEPS_DIR=$GITHUB_WORKSPACE/deps
           export CC="$TARGET-gcc"
